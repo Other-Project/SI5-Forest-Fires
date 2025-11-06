@@ -1,0 +1,36 @@
+yolofm:
+    type: Web
+    title: "YOLOFM: an improved fire and smoke object detection algorithm based on YOLOv5n"
+    author: ["Xin Geng", "Yixuan Su", "Xianghong Cao", "Huaizhou Li", "Linggong Liu "]
+    date: 2024-02-24
+    url: "https://www.nature.com/articles/s41598-024-55232-0"
+maths_pred_fire:
+    type: Web
+    title: "A Mathematical Model for Predicting Fire Spread in Wildland Fuels"
+    author: ["R. C. Rothermel"]
+    date: 1972
+    url: "https://digitalcommons.usu.edu/barkbeetles/438/"
+model_wind:
+    type: Web
+    title: "Modeling Wind Adjustment Factor and Midflame Wind Speed for Rothermel’s Surface Fire Spread Model"
+    author: ["Patricia L. Andrews"]
+    date: 2012-01
+    url: "https://www.fs.usda.gov/rm/pubs/rmrs_gtr266.pdf"
+prop_slope:
+    type: Web
+    title: "An Approximated Model of Wildfire Propagation on Slope"
+    author: ["Hengameh R. Dehkordi"]
+    date: 2024-12-25
+    url: "https://arxiv.org/html/2412.18931v1"
+fwi:
+    type: Web
+    title: "Canada’s Fire Weather Index System"
+    author: ["Gouvernement du Canada"]
+    date: 2025-10-01
+    url: "https://natural-resources.canada.ca/forest-forestry/wildland-fires/canada-fire-weather-index-system"
+ifm:
+    type: Web
+    title: "Météo-France en appui à la lutte contre les feux de forêts"
+    author: ["Météo-France"]
+    date: 2025-05-05
+    url: "https://meteofrance.com/actualites-et-dossiers/actualites/meteo-france-en-appui-a-la-lutte-contre-les-feux-de-forets"
