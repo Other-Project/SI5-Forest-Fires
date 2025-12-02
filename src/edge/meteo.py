@@ -59,17 +59,11 @@ class ForestSensorSimulator:
             self._update_normal_weather()
 
         return {
-            "sensor_id": self.sensor_id,
-            "timestamp": datetime.now().isoformat(),
-            "location": self.location,
-            "status": "FIRE" if self.is_fire_active else "OK",
-            "measurements": {
-                "temperature": round(self.temp, 2),
-                "humidity": round(self.humidity, 2),
-                "co2": round(self.co2, 2),
-                "wind_speed": round(self.wind_speed, 2),
-                "wind_direction": self.wind_dir,
-            },
+            "temperature": round(self.temp, 2),
+            "humidity": round(self.humidity, 2),
+            "co2": round(self.co2, 2),
+            "wind_speed": round(self.wind_speed, 2),
+            "wind_direction": self.wind_dir,
         }
 
     def trigger_fire(self):
@@ -102,3 +96,16 @@ try:
 
 except KeyboardInterrupt:
     print("Simulation arrêtée.")
+"""
+"sensor_id": self.sensor_id,
+"timestamp": datetime.now().isoformat(),
+"location": self.location,
+"status": "FIRE" if self.is_fire_active else "OK",
+"measurements": {
+    "temperature": round(self.temp, 2),
+    "humidity": round(self.humidity, 2),
+    "co2": round(self.co2, 2),
+    "wind_speed": round(self.wind_speed, 2),
+    "wind_direction": self.wind_dir,
+},
+"""
