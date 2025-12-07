@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "src/fog/pre-treatment/Cargo.toml"
+    ]
+}
