@@ -1,4 +1,3 @@
-use std::thread;
 use std::time::Duration;
 
 use clap::{Arg, Command};
@@ -9,13 +8,21 @@ use log::info;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::consumer::Consumer;
-use rdkafka::message::{BorrowedMessage, OwnedMessage};
+use rdkafka::message::OwnedMessage;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::Message;
 
-use std::io::Write;
 use env_logger::Builder;
 use log::LevelFilter;
+use std::io::Write;
+
+mod messages;
+mod parser;
+mod process;
+mod raw_messages;
+
+use parser::parse_weather_data;
+use process::process_weather_data;
 
 pub fn setup_logger(log_thread: bool, rust_log: Option<&String>) {
     let mut builder = Builder::new();
@@ -50,46 +57,40 @@ pub fn setup_logger(log_thread: bool, rust_log: Option<&String>) {
     builder.init();
 }
 
-async fn record_borrowed_message_receipt(msg: &BorrowedMessage<'_>) {
-    // Simulate some work that must be done in the same order as messages are
-    // received; i.e., before truly parallel processing can begin.
-    info!("Message received: {}", msg.offset());
-}
+// Process weather data message
+fn process_message(msg: OwnedMessage, minio_endpoint: String) -> Result<String, String> {
+    info!("Processing message at offset {}", msg.offset());
 
-async fn record_owned_message_receipt(_msg: &OwnedMessage) {
-    // Like `record_borrowed_message_receipt`, but takes an `OwnedMessage`
-    // instead, as in a real-world use case  an `OwnedMessage` might be more
-    // convenient than a `BorrowedMessage`.
-}
+    // Extract payload as byte array
+    let payload = msg
+        .payload()
+        .ok_or_else(|| "No payload in message".to_string())?;
 
-// Emulates an expensive, synchronous computation.
-fn expensive_computation(msg: OwnedMessage) -> String {
-    info!("Starting expensive computation on message {}", msg.offset());
-    thread::sleep(Duration::from_millis(500));
+    // Parse payload as RawWeatherData
+    let raw_weather_data =
+        parse_weather_data(payload).ok_or_else(|| "Failed to parse weather data".to_string())?;
+
+    // Process and convert to WeatherData
+    let weather_data = process_weather_data(raw_weather_data, minio_endpoint)
+        .map_err(|e| format!("Failed to process weather data: {}", e))?;
+
+    // Serialize to JSON for publishing
+    let json =
+        serde_json::to_string(&weather_data).map_err(|e| format!("Failed to serialize: {}", e))?;
+
     info!(
-        "Expensive computation completed on message {}",
-        msg.offset()
+        "Successfully processed message from device {}",
+        weather_data.metadata.device_id
     );
-    match msg.payload_view::<str>() {
-        Some(Ok(payload)) => format!("Payload len for {} is {}", payload, payload.len()),
-        Some(Err(_)) => "Message payload is not a string".to_owned(),
-        None => "No payload".to_owned(),
-    }
+    Ok(json)
 }
 
-// Creates all the resources and runs the event loop. The event loop will:
-//   1) receive a stream of messages from the `StreamConsumer`.
-//   2) filter out eventual Kafka errors.
-//   3) send the message to a thread pool for processing.
-//   4) produce the result to the output topic.
-// `tokio::spawn` is used to handle IO-bound tasks in parallel (e.g., producing
-// the messages), while `tokio::task::spawn_blocking` is used to handle the
-// simulated CPU-bound task.
 async fn run_async_processor(
     brokers: String,
     group_id: String,
     input_topic: String,
     output_topic: String,
+    minio_endpoint: String,
 ) {
     // Create the `StreamConsumer`, to receive the messages from the topic in form of a `Stream`.
     let consumer: StreamConsumer = ClientConfig::new()
@@ -116,30 +117,32 @@ async fn run_async_processor(
     let stream_processor = consumer.stream().try_for_each(|borrowed_message| {
         let producer = producer.clone();
         let output_topic = output_topic.to_string();
+        let minio_endpoint = minio_endpoint.clone();
         async move {
-            // Process each message
-            record_borrowed_message_receipt(&borrowed_message).await;
-            // Borrowed messages can't outlive the consumer they are received from, so they need to
-            // be owned in order to be sent to a separate thread.
+            info!("Message received at offset {}", borrowed_message.offset());
             let owned_message = borrowed_message.detach();
-            record_owned_message_receipt(&owned_message).await;
             tokio::spawn(async move {
-                // The body of this block will be executed on the main thread pool,
-                // but we perform `expensive_computation` on a separate thread pool
-                // for CPU-intensive tasks via `tokio::task::spawn_blocking`.
-                let computation_result =
-                    tokio::task::spawn_blocking(|| expensive_computation(owned_message))
-                        .await
-                        .expect("failed to wait for expensive computation");
-                let produce_future = producer.send(
-                    FutureRecord::to(&output_topic)
-                        .key("some key")
-                        .payload(&computation_result),
-                    Duration::from_secs(0),
-                );
-                match produce_future.await {
-                    Ok(delivery) => println!("Sent: {:?}", delivery),
-                    Err((e, _)) => println!("Error: {:?}", e),
+                // Process the message in a separate thread pool
+                let process_result = tokio::task::spawn_blocking(move || {
+                    process_message(owned_message, minio_endpoint)
+                })
+                .await;
+
+                match process_result {
+                    Ok(Ok(json_payload)) => {
+                        // Successfully processed - produce to output topic
+                        let produce_future = producer.send(
+                            FutureRecord::<(), [u8]>::to(&output_topic)
+                                .payload(json_payload.as_bytes()),
+                            Duration::from_secs(5),
+                        );
+                        match produce_future.await {
+                            Ok(delivery) => info!("Published message: {:?}", delivery),
+                            Err((e, _)) => eprintln!("Failed to publish message: {:?}", e),
+                        }
+                    }
+                    Ok(Err(e)) => eprintln!("Failed to process message: {}", e),
+                    Err(e) => eprintln!("Task join error: {}", e),
                 }
             });
             Ok(())
@@ -200,6 +203,13 @@ async fn main() {
                 .value_parser(clap::value_parser!(usize))
                 .default_value("1"),
         )
+        .arg(
+            Arg::new("minio-endpoint")
+                .long("minio-endpoint")
+                .env("MINIO_ENDPOINT")
+                .help("MinIO endpoint URL")
+                .default_value("http://localhost:9000"),
+        )
         .get_matches();
 
     setup_logger(true, matches.get_one("log-conf"));
@@ -209,6 +219,7 @@ async fn main() {
     let input_topic = matches.get_one::<String>("input-topic").unwrap();
     let output_topic = matches.get_one::<String>("output-topic").unwrap();
     let num_workers = *matches.get_one::<usize>("num-workers").unwrap();
+    let minio_endpoint = matches.get_one::<String>("minio-endpoint").unwrap();
 
     (0..num_workers)
         .map(|_| {
@@ -217,6 +228,7 @@ async fn main() {
                 group_id.to_owned(),
                 input_topic.to_owned(),
                 output_topic.to_owned(),
+                minio_endpoint.to_owned(),
             ))
         })
         .collect::<FuturesUnordered<_>>()
