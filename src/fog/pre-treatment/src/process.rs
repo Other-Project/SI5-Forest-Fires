@@ -1,7 +1,8 @@
 use crate::messages::{Location, Metadata, Quality, WeatherData};
 use crate::raw_messages::RawWeatherData;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use log::info;
+use chrono::{TimeZone, Utc}; 
 
 /// Process raw weather data and fetch station info from MinIO
 pub fn process_weather_data(
@@ -13,7 +14,7 @@ pub fn process_weather_data(
 
     // Convert raw values to processed values
     // Temperature: steps of 0.25°C
-    let temperature = (raw_data.temperature as f32) * 0.25;
+    let temperature = (raw_data.temperature as f32) * 0.25 - 20.0;
 
     // Air humidity: steps of 1%, convert to 0.0-1.0
     let air_humidity = (raw_data.air_humidity as f32) / 100.0;
@@ -53,10 +54,7 @@ fn process_metadata(
 
     info!("Processing metadata for device {}", raw_metadata.device_id);
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| anyhow!("Failed to get current time: {}", e))?
-        .as_secs() as i64;
+    let now = Utc::now();
 
     Ok(Metadata {
         device_id: raw_metadata.device_id,
@@ -66,7 +64,7 @@ fn process_metadata(
             altitude: 0.0,  // TODO: Fetch from MinIO
         },
         forest_area: "Unknown".to_string(), // TODO: Fetch from MinIO
-        timestamp: raw_metadata.timestamp as i64,
+        timestamp: Utc.timestamp_opt(raw_metadata.timestamp as i64, 0).unwrap(),
         processed_timestamp: now,
         battery_voltage: (raw_metadata.battery_voltage as f32) * 0.01, // Convert 10mV steps to volts
         is_charging: (raw_metadata.status_bits & 0x01) != 0,

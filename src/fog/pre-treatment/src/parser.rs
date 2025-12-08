@@ -1,15 +1,15 @@
 use crate::raw_messages::*;
 
 pub fn parse_metadata(data: &[u8]) -> Option<RawMetadata> {
-    if data.len() < 8 {
+    if data.len() < 9 {
         return None;
     }
 
     Some(RawMetadata {
         device_id: u16::from_be_bytes([data[0], data[1]]),
         timestamp: u32::from_be_bytes([data[2], data[3], data[4], data[5]]),
-        battery_voltage: data[6],
-        status_bits: data[7],
+        battery_voltage: u16::from_be_bytes([data[6], data[7]]),
+        status_bits: data[8],
     })
 }
 
@@ -19,13 +19,13 @@ pub fn parse_weather_data(data: &[u8]) -> Option<RawWeatherData> {
     }
 
     Some(RawWeatherData {
-        metadata: parse_metadata(&data[0..8])?,
-        temperature: i16::from_be_bytes([data[8], data[9]]),
-        air_humidity: data[10],
-        soil_humidity: data[11],
-        air_pressure: u16::from_be_bytes([data[12], data[13]]),
-        rain: u16::from_be_bytes([data[14], data[15]]),
-        wind_speed: data[16],
-        wind_direction: u16::from_be_bytes([data[17], data[18]]),
+        metadata: parse_metadata(&data[0..9])?,
+        temperature: i16::from_be_bytes([data[9], data[10]]),
+        air_humidity: data[11],
+        soil_humidity: data[12],
+        air_pressure: u16::from_be_bytes([data[13], data[14]]),
+        rain: u16::from_be_bytes([data[15], data[16]]),
+        wind_speed: data[17],
+        wind_direction: u16::from_be_bytes([data[18], data[19]]),
     })
 }

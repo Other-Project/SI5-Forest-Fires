@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Location information
@@ -31,10 +32,10 @@ pub struct Metadata {
     pub forest_area: String,
 
     /// Timestamp of the message
-    pub timestamp: i64,
+    pub timestamp: DateTime<Utc>,
 
     /// Timestamp when the message was processed
-    pub processed_timestamp: i64,
+    pub processed_timestamp: DateTime<Utc>,
 
     /// Battery voltage in volts
     pub battery_voltage: f32,

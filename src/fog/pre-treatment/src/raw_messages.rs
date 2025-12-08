@@ -7,7 +7,7 @@ pub struct RawMetadata {
     pub timestamp: u32,
 
     /// Battery voltage (by steps of 10mV)
-    pub battery_voltage: u8,
+    pub battery_voltage: u16,
 
     /// Status bits
     pub status_bits: u8,
