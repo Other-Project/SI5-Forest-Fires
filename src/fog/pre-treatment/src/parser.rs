@@ -1,31 +1,52 @@
 use crate::raw_messages::*;
+use nom::{
+    number::complete::{be_i16, be_u16, be_u32, be_u8},
+    IResult,
+};
 
-pub fn parse_metadata(data: &[u8]) -> Option<RawMetadata> {
-    if data.len() < 9 {
-        return None;
-    }
-
-    Some(RawMetadata {
-        device_id: u16::from_be_bytes([data[0], data[1]]),
-        timestamp: u32::from_be_bytes([data[2], data[3], data[4], data[5]]),
-        battery_voltage: u16::from_be_bytes([data[6], data[7]]),
-        status_bits: data[8],
-    })
+fn parse_metadata_i(input: &[u8]) -> IResult<&[u8], RawMetadata> {
+    let (input, device_id) = be_u16(input)?;
+    let (input, timestamp) = be_u32(input)?;
+    let (input, battery_voltage) = be_u16(input)?;
+    let (input, status_bits) = be_u8(input)?;
+    Ok((
+        input,
+        RawMetadata {
+            device_id,
+            timestamp,
+            battery_voltage,
+            status_bits,
+        },
+    ))
 }
 
-pub fn parse_weather_data(data: &[u8]) -> Option<RawWeatherData> {
-    if data.len() < 20 {
-        return None;
-    }
+fn parse_weather_i(input: &[u8]) -> IResult<&[u8], RawWeatherData> {
+    let (input, metadata) = parse_metadata_i(input)?;
+    let (input, temperature) = be_i16(input)?;
+    let (input, air_humidity) = be_u8(input)?;
+    let (input, soil_humidity) = be_u8(input)?;
+    let (input, air_pressure) = be_u16(input)?;
+    let (input, rain) = be_u16(input)?;
+    let (input, wind_speed) = be_u8(input)?;
+    let (input, wind_direction) = be_u16(input)?;
+    Ok((
+        input,
+        RawWeatherData {
+            metadata,
+            temperature,
+            air_humidity,
+            soil_humidity,
+            air_pressure,
+            rain,
+            wind_speed,
+            wind_direction,
+        },
+    ))
+}
 
-    Some(RawWeatherData {
-        metadata: parse_metadata(&data[0..9])?,
-        temperature: i16::from_be_bytes([data[9], data[10]]),
-        air_humidity: data[11],
-        soil_humidity: data[12],
-        air_pressure: u16::from_be_bytes([data[13], data[14]]),
-        rain: u16::from_be_bytes([data[15], data[16]]),
-        wind_speed: data[17],
-        wind_direction: u16::from_be_bytes([data[18], data[19]]),
-    })
+pub fn parse_weather_data(data: &[u8]) -> Result<RawWeatherData, nom::Err<nom::error::Error<&[u8]>>> {
+    match parse_weather_i(data) {
+        Ok((_, weather)) => Ok(weather),
+        Err(err) => Err(err),
+    }
 }

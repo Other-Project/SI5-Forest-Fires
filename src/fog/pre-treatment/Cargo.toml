@@ -17,6 +17,8 @@ minio = { git = "https://github.com/minio/minio-rs.git" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 futures = "0.3"
+nom = "8.0.0"
+chrono = "0.4.42"
 
 # Error handling
 anyhow = "1.0"
@@ -27,4 +29,3 @@ clap = { version = "4.5.53", features = ["env"] }
 # Logs
 log = "0.4.29"
 env_logger = "0.11.8"
-chrono = "0.4.42"

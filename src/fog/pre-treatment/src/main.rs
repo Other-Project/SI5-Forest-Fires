@@ -68,7 +68,7 @@ fn process_message(msg: OwnedMessage, minio_endpoint: String) -> Result<String, 
 
     // Parse payload as RawWeatherData
     let raw_weather_data =
-        parse_weather_data(payload).ok_or_else(|| "Failed to parse weather data".to_string())?;
+        parse_weather_data(payload).map_err(|e| format!("Failed to parse weather data: {}", e))?;
 
     // Process and convert to WeatherData
     let weather_data = process_weather_data(raw_weather_data, minio_endpoint)
