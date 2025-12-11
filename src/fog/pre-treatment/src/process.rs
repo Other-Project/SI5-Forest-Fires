@@ -1,16 +1,17 @@
-use crate::messages::{Location, Metadata, Quality, WeatherData};
+use crate::messages::{Metadata, Quality, WeatherData};
 use crate::raw_messages::RawWeatherData;
+use crate::station_config::StationConfig;
 use anyhow::Result;
 use log::info;
-use chrono::{TimeZone, Utc}; 
+use chrono::{TimeZone, Utc};
 
 /// Process raw weather data and fetch station info from MinIO
 pub fn process_weather_data(
     raw_data: RawWeatherData,
-    minio_endpoint: String,
+    station_metadata: &StationConfig,
 ) -> Result<WeatherData> {
     // Process metadata (fetch station info from MinIO)
-    let metadata = process_metadata(&raw_data.metadata, &minio_endpoint)?;
+    let metadata = process_metadata(&raw_data.metadata, &station_metadata)?;
 
     // Convert raw values to processed values
     // Temperature: steps of 0.25°C
@@ -48,22 +49,19 @@ pub fn process_weather_data(
 
 fn process_metadata(
     raw_metadata: &crate::raw_messages::RawMetadata,
-    _minio_endpoint: &str,
+    station_metadata: &StationConfig,
 ) -> Result<Metadata> {
     // TODO: Fetch station data from MinIO using device_id
+
 
     info!("Processing metadata for device {}", raw_metadata.device_id);
 
     let now = Utc::now();
 
     Ok(Metadata {
-        device_id: raw_metadata.device_id,
-        location: Location {
-            latitude: 0.0,  // TODO: Fetch from MinIO
-            longitude: 0.0, // TODO: Fetch from MinIO
-            altitude: 0.0,  // TODO: Fetch from MinIO
-        },
-        forest_area: "Unknown".to_string(), // TODO: Fetch from MinIO
+        device_id: station_metadata.device_id.clone(),
+        location: station_metadata.location.clone(),
+        forest_area: station_metadata.forest_area.clone(),
         timestamp: Utc.timestamp_opt(raw_metadata.timestamp as i64, 0).unwrap(),
         processed_timestamp: now,
         battery_voltage: (raw_metadata.battery_voltage as f32) * 0.01, // Convert 10mV steps to volts
