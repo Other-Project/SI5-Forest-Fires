@@ -9,6 +9,7 @@
         "@deck.gl/extensions": "^9.1.0",
         "@deck.gl/geo-layers": "^9.2.5",
         "@deck.gl/layers": "^9.1.0",
+        "@deck.gl/mapbox": "^9.2.5",
         "@loaders.gl/core": "^4.1.1",
         "@loaders.gl/geotiff": "^4.1.1",
         "maplibre-gl": "^4.5.0",
@@ -66,6 +67,8 @@
     "@deck.gl/geo-layers": ["@deck.gl/geo-layers@9.2.5", "", { "dependencies": { "@loaders.gl/3d-tiles": "^4.2.0", "@loaders.gl/gis": "^4.2.0", "@loaders.gl/loader-utils": "^4.2.0", "@loaders.gl/mvt": "^4.2.0", "@loaders.gl/schema": "^4.2.0", "@loaders.gl/terrain": "^4.2.0", "@loaders.gl/tiles": "^4.2.0", "@loaders.gl/wms": "^4.2.0", "@luma.gl/gltf": "^9.2.4", "@luma.gl/shadertools": "^9.2.4", "@math.gl/core": "^4.1.0", "@math.gl/culling": "^4.1.0", "@math.gl/web-mercator": "^4.1.0", "@types/geojson": "^7946.0.8", "a5-js": "^0.5.0", "h3-js": "^4.1.0", "long": "^3.2.0" }, "peerDependencies": { "@deck.gl/core": "~9.2.0", "@deck.gl/extensions": "~9.2.0", "@deck.gl/layers": "~9.2.0", "@deck.gl/mesh-layers": "~9.2.0", "@loaders.gl/core": "^4.2.0", "@luma.gl/core": "~9.2.4", "@luma.gl/engine": "~9.2.4" } }, "sha512-QVjLwHEAtNqRdjBuYJwztCAwSTmgWujPT0geGWaFhr7ZvyigAqi3l2ETys5YqjjJ87bKnUBwd6iOyw1xkXbsCw=="],
 
     "@deck.gl/layers": ["@deck.gl/layers@9.2.5", "", { "dependencies": { "@loaders.gl/images": "^4.2.0", "@loaders.gl/schema": "^4.2.0", "@luma.gl/shadertools": "^9.2.4", "@mapbox/tiny-sdf": "^2.0.5", "@math.gl/core": "^4.1.0", "@math.gl/polygon": "^4.1.0", "@math.gl/web-mercator": "^4.1.0", "earcut": "^2.2.4" }, "peerDependencies": { "@deck.gl/core": "~9.2.0", "@loaders.gl/core": "^4.2.0", "@luma.gl/core": "~9.2.4", "@luma.gl/engine": "~9.2.4" } }, "sha512-a48zWxeHknSX67ZeIzWeLXuOVJkEnQjnLIC27Uv3zHjKlvaoraWPOgScUNyteB0UIIzhzE+D8lF+ViHeIdkNSA=="],
+
+    "@deck.gl/mapbox": ["@deck.gl/mapbox@9.2.5", "", { "dependencies": { "@luma.gl/constants": "^9.2.4", "@math.gl/web-mercator": "^4.1.0" }, "peerDependencies": { "@deck.gl/core": "~9.2.0", "@luma.gl/core": "~9.2.4" } }, "sha512-VQPV/JMVNKjLbbfq+0CL7Fvf78x9k7zvXqnhMicT/clLWzHdc7r7yfadLVPaRwEGh0VpMKTUUOrdszUTkW95wA=="],
 
     "@deck.gl/mesh-layers": ["@deck.gl/mesh-layers@9.2.5", "", { "dependencies": { "@loaders.gl/gltf": "^4.2.0", "@loaders.gl/schema": "^4.2.0", "@luma.gl/gltf": "^9.2.4", "@luma.gl/shadertools": "^9.2.4" }, "peerDependencies": { "@deck.gl/core": "~9.2.0", "@luma.gl/core": "~9.2.4", "@luma.gl/engine": "~9.2.4" } }, "sha512-OJ7Nx6xhp7+bQ4S4asUUp7PdGwcfmQpQhe5SHDGy1UBZ0yZE+ojOo9uvVfXvGBnqq4Zpg9avV+WRN1/BffBsOw=="],
 

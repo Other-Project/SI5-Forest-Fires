@@ -1,6 +1,6 @@
 import { type Component, createSignal, onMount, createEffect, type JSXElement } from 'solid-js';
 import maplibregl from 'maplibre-gl';
-import { Deck } from '@deck.gl/core';
+import { MapboxOverlay } from '@deck.gl/mapbox';
 import { ScatterplotLayer } from '@deck.gl/layers';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { ViewMode, FirePoint, WindData } from '../types';
@@ -16,8 +16,8 @@ type MapContainerProps = {
 };
 
 const MapContainer: Component<MapContainerProps> = (props) => {
-    const [map, setMap] = createSignal<maplibregl.Map | null>(null);
-    const [deck, setDeck] = createSignal<Deck | null>(null);
+    const [setMap] = createSignal<maplibregl.Map | null>(null);
+    const [overlay, setOverlay] = createSignal<MapboxOverlay | null>(null);
 
     const createLayers = () => {
         const currentView = props.viewMode();
@@ -97,41 +97,20 @@ const MapContainer: Component<MapContainerProps> = (props) => {
                 }
             });
 
-            // Initialize Deck.gl
-            const deckInstance = new Deck({
-                canvas: 'deck-canvas',
-                width: '100%',
-                height: '100%',
-                initialViewState: {
-                    longitude: 5.58586,
-                    latitude: 43.60215,
-                    zoom: 10,
-                    pitch: 60,
-                    bearing: 0,
-                },
-                controller: true,
-                onViewStateChange: ({ viewState }) => {
-                    mapInstance.jumpTo({
-                        center: [viewState.longitude, viewState.latitude],
-                        zoom: viewState.zoom,
-                        bearing: viewState.bearing,
-                        pitch: viewState.pitch,
-                    });
-                },
-                layers: createLayers(),
+            // Use MapboxOverlay so deck.gl layers are attached to the map and map drives the view
+            const overlayInstance = new MapboxOverlay({
+                layers: createLayers()
             });
-
-            setDeck(deckInstance);
+            mapInstance.addControl(overlayInstance);
+            setOverlay(overlayInstance);
         });
     });
 
     // update layers when mode changes
     createEffect(() => {
         props.viewMode();
-        const deckInstance = deck();
-        if (deckInstance) {
-            deckInstance.setProps({ layers: createLayers() });
-        }
+        const ov = overlay();
+        if (ov) ov.setProps({ layers: createLayers() });
     });
 
     return (
