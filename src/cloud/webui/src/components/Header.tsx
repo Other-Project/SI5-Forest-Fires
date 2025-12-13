@@ -11,7 +11,7 @@ const Header: Component<{ viewMode: Accessor<ViewMode>; onChange: (m: ViewMode) 
           class={props.viewMode() === 'risk' ? 'active' : ''}
           onClick={() => props.onChange('risk')}
         >
-          Fire Risk
+          Risk
         </button>
         <button
           class={props.viewMode() === 'surveillance' ? 'active' : ''}

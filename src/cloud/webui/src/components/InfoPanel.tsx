@@ -7,7 +7,7 @@ const InfoPanel: Component<{ viewMode: Accessor<ViewMode> }> = (props) => {
     <div class="info-panel">
       <Show when={props.viewMode() === 'risk'}>
         <div class="panel-content">
-          <h3>Active Fire Risk Zones</h3>
+          <h3>Fire Risk Zones</h3>
           <div class="stats">
             <div class="stat">
               <span class="label">High Risk:</span>
@@ -25,15 +25,15 @@ const InfoPanel: Component<{ viewMode: Accessor<ViewMode> }> = (props) => {
           <div class="legend">
             <div class="legend-item">
               <span class="dot red"></span>
-              <span>Active Fire</span>
-            </div>
-            <div class="legend-item">
-              <span class="dot orange"></span>
-              <span>Contained</span>
+              <span>High</span>
             </div>
             <div class="legend-item">
               <span class="dot yellow"></span>
-              <span>Monitoring</span>
+              <span>Medium</span>
+            </div>
+            <div class="legend-item">
+              <span class="dot green"></span>
+              <span>Low</span>
             </div>
           </div>
         </div>
@@ -41,19 +41,19 @@ const InfoPanel: Component<{ viewMode: Accessor<ViewMode> }> = (props) => {
 
       <Show when={props.viewMode() === 'surveillance'}>
         <div class="panel-content">
-          <h3>Surveillance Coverage</h3>
-          <div class="stats">
-            <div class="stat">
-              <span class="label">Cameras:</span>
-              <span class="value">12</span>
+          <h3>Fire Surveillance</h3>
+          <div class="legend">
+            <div class="legend-item">
+              <span class="dot red"></span>
+              <span>Active</span>
             </div>
-            <div class="stat">
-              <span class="label">Sensors:</span>
-              <span class="value">24</span>
+            <div class="legend-item">
+              <span class="dot orange"></span>
+              <span>Contained</span>
             </div>
-            <div class="stat">
-              <span class="label">Coverage:</span>
-              <span class="value">87%</span>
+            <div class="legend-item">
+              <span class="dot grey"></span>
+              <span>Burnt</span>
             </div>
           </div>
         </div>
