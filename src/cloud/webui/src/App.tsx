@@ -1,35 +1,39 @@
-import { createSignal } from 'solid-js'
-import solidLogo from '/solid.svg'
-import viteLogo from '/vite.svg'
+// src/App.tsx
+import { type Component, createSignal } from 'solid-js';
 import './App.css'
+import Header from './components/Header';
+import InfoPanel from './components/InfoPanel';
+import WindIndicator from './components/WindIndicator';
+import MapContainer from './components/MapContainer';
+import type { ViewMode, FirePoint, WindData } from './types';
 
-function App() {
-  const [count, setCount] = createSignal(0)
+const App: Component = () => {
+  const [viewMode, setViewMode] = createSignal<ViewMode>('risk');
+
+  // Sample data
+  const firePoints: FirePoint[] = [
+    { coordinates: [-122.4, 37.8], intensity: 8.5, status: 'active' },
+    { coordinates: [-122.5, 37.7], intensity: 4.2, status: 'monitoring' },
+    { coordinates: [-122.3, 37.9], intensity: 6.8, status: 'contained' },
+  ];
+  const windData: WindData[] = [
+    { lat: 37.8, lon: -122.4, speed: 15, direction: 45 },
+    { lat: 37.7, lon: -122.5, speed: 12, direction: 90 },
+    { lat: 37.9, lon: -122.3, speed: 18, direction: 30 },
+  ];
+
+  const handleViewChange = (mode: ViewMode) => setViewMode(mode);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} class="logo" alt="Vite logo" />
-        </a>
-        <a href="https://solidjs.com" target="_blank">
-          <img src={solidLogo} class="logo solid" alt="Solid logo" />
-        </a>
-      </div>
-      <h1>Vite + Solid</h1>
-      <div class="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count()}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p class="read-the-docs">
-        Click on the Vite and Solid logos to learn more
-      </p>
-    </>
-  )
-}
+    <div class="dashboard">
+      <Header viewMode={viewMode} onChange={handleViewChange} />
 
-export default App
+      <MapContainer viewMode={viewMode} firePoints={firePoints} windData={windData}>
+        <InfoPanel viewMode={viewMode} />
+        <WindIndicator direction={windData[0].direction} speed={windData[0].speed} />
+      </MapContainer>
+    </div>
+  );
+};
+
+export default App;
