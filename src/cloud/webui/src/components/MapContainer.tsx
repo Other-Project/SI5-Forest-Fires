@@ -5,6 +5,7 @@ import { ScatterplotLayer } from '@deck.gl/layers';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { ViewMode, FirePoint, WindData } from '../types';
 import './map-container.css';
+import type { LayersList } from '@deck.gl/core';
 
 const DEM_TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'; // terrarium tiles (no key)
 
@@ -22,9 +23,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
     const createLayers = () => {
         const currentView = props.viewMode();
 
-        const layers: any[] = [
-
-        ];
+        const layers: LayersList = [];
 
         if (currentView === 'risk') {
             layers.push(
