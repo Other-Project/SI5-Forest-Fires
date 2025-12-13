@@ -17,7 +17,8 @@
     "@loaders.gl/core": "^4.1.1",
     "@loaders.gl/geotiff": "^4.1.1",
     "maplibre-gl": "^4.5.0",
-    "solid-js": "^1.9.10"
+    "solid-js": "^1.9.10",
+    "weatherlayers-gl": "^2025.12.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

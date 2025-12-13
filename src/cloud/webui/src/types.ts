@@ -7,8 +7,6 @@ export interface FirePoint {
 }
 
 export interface WindData {
-  lat: number;
-  lon: number;
-  speed: number;
-  direction: number;
+  direction: number; // in degrees
+  speed: number;     // in km/h
 }

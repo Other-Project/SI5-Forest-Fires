@@ -15,7 +15,7 @@ const App: Component = () => {
     { coordinates: [5.58586, 43.60215], intensity: 8.5, status: 'active' },
   ];
   const windData: WindData[] = [
-    { lat: 43.60215, lon: 5.58586, speed: 15, direction: 45 },
+    { speed: 15, direction: 45 },
   ];
 
   const handleViewChange = (mode: ViewMode) => setViewMode(mode);
@@ -24,7 +24,7 @@ const App: Component = () => {
     <div class="dashboard">
       <Header viewMode={viewMode} onChange={handleViewChange} />
 
-      <MapContainer viewMode={viewMode} firePoints={firePoints} windData={windData}>
+      <MapContainer viewMode={viewMode} firePoints={firePoints} windData={windData[0]}>
         <InfoPanel viewMode={viewMode} />
         <WindIndicator direction={windData[0].direction} speed={windData[0].speed} />
       </MapContainer>
