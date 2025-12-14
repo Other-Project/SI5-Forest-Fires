@@ -59,33 +59,9 @@ const MapContainer: Component<MapContainerProps> = (props) => {
         const layers: LayersList = [];
 
         if (currentView === 'risk') {
-            layers.push(
-                new ScatterplotLayer({
-                    id: 'fire-risk-points',
-                    data: props.firePoints,
-                    // position: légèrement au-dessus du terrain pour éviter inter-pénétrations et pics
-                    getPosition: (d: FirePoint) => [...d.coordinates, (d.intensity ?? 1) * 10],
-                    getRadius: (d: FirePoint) => d.intensity * 1000,
-                    getFillColor: (d: FirePoint) => {
-                        if (d.status === 'active') return [255, 0, 0, 180];
-                        if (d.status === 'contained') return [255, 165, 0, 150];
-                        return [255, 255, 0, 120];
-                    },
-                    radiusMinPixels: 8,
-                    radiusMaxPixels: 100,
-                })
-            );
-        } else {
-            layers.push(
-                new ScatterplotLayer({
-                    id: 'surveillance-points',
-                    data: props.firePoints,
-                    getPosition: (d: FirePoint) => [...d.coordinates, (d.intensity ?? 1) * 5],
-                    getRadius: 1500,
-                    getFillColor: [0, 150, 255, 150],
-                    radiusMinPixels: 10,
-                })
-            );
+            // TODO
+        } else if (currentView === 'surveillance') {
+            // TODO
         }
 
         const [wind_u, wind_v] = props.windData ? [
@@ -132,7 +108,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
             });
 
             // Set the terrain using the DEM source
-            mapInstance.setTerrain({ source: 'dem-source', exaggeration: 1.5 });
+            mapInstance.setTerrain({ source: 'dem-source', exaggeration: 3 });
 
             // Hillshade layer for better terrain visualization
             mapInstance.addLayer({

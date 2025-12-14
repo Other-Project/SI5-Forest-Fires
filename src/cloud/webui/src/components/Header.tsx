@@ -6,8 +6,8 @@ const Header: Component<{ viewMode: Accessor<ViewMode>; onChange: (m: ViewMode) 
   return (
     <header class="header">
       <div class="logo-title">
-        <img src="/icon.svg" alt="Logo" class="logo" height="15" />
-        <h1>Forest Fire Monitoring Dashboard</h1>
+        {/*<img src="/icon.svg" alt="Logo" class="logo" height="15" />
+        <h1>Forest Dashboard</h1>*/}
       </div>
       <div class="view-selector">
         <button
