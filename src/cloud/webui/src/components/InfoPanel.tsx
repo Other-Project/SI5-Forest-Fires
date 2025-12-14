@@ -8,7 +8,7 @@ const InfoPanel: Component<{ viewMode: Accessor<ViewMode> }> = (props) => {
       <Show when={props.viewMode() === 'risk'}>
         <div class="panel-content">
           <h3>Fire Risk Zones</h3>
-          <div class="stats">
+          {/*<div class="stats">
             <div class="stat">
               <span class="label">High Risk:</span>
               <span class="value red">3</span>
@@ -21,7 +21,7 @@ const InfoPanel: Component<{ viewMode: Accessor<ViewMode> }> = (props) => {
               <span class="label">Humidity:</span>
               <span class="value">32%</span>
             </div>
-          </div>
+          </div>*/}
           <div class="legend">
             <div class="legend-item">
               <span class="dot red"></span>

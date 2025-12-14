@@ -1,19 +1,19 @@
-import { type Component, createSignal, onMount, createEffect, type JSXElement, onCleanup } from 'solid-js';
+import { type Component, createSignal, onMount, createEffect, type JSXElement } from 'solid-js';
 import maplibregl from 'maplibre-gl';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { ScatterplotLayer } from '@deck.gl/layers';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { ViewMode, FirePoint, WindData } from '../types';
+import type { ViewMode, WindData } from '../types';
 import './map-container.css';
 import type { LayersList } from '@deck.gl/core';
 import { ParticleLayer } from 'weatherlayers-gl';
+import type { FeatureCollection } from 'geojson';
 
 const DEM_TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'; // terrarium tiles (no key)
 
 type MapContainerProps = {
     viewMode: () => ViewMode;
-    firePoints: FirePoint[];
     windData: WindData;
+    areas?: FeatureCollection;
     children?: JSXElement;
 };
 
@@ -50,10 +50,11 @@ function createUniformWindData(u: number, v: number) {
 
 
 const MapContainer: Component<MapContainerProps> = (props) => {
-    const [setMap] = createSignal<maplibregl.Map | null>(null);
+    // keep both getter and setter so we can read the map instance later
+    const [map, setMap] = createSignal<maplibregl.Map | null>(null);
     const [overlay, setOverlay] = createSignal<MapboxOverlay | null>(null);
 
-        const createLayers = () => {
+    const createLayers = () => {
         const currentView = props.viewMode();
 
         const layers: LayersList = [];
@@ -68,7 +69,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
             props.windData.speed * Math.cos((props.windData.direction * Math.PI) / 180),
             props.windData.speed * Math.sin((props.windData.direction * Math.PI) / 180)
         ] : [0, 0];
-        
+
         layers.push(new ParticleLayer({
             id: 'wind-layer',
             image: createUniformWindData(wind_u, wind_v),
@@ -108,7 +109,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
             });
 
             // Set the terrain using the DEM source
-            mapInstance.setTerrain({ source: 'dem-source', exaggeration: 3 });
+            mapInstance.setTerrain({ source: 'dem-source', exaggeration: 1.5 });
 
             // Hillshade layer for better terrain visualization
             mapInstance.addLayer({
@@ -124,6 +125,75 @@ const MapContainer: Component<MapContainerProps> = (props) => {
                 }
             });
 
+            mapInstance.addSource('risk-areas', {
+                type: 'geojson',
+                data: props.areas ?? { type: 'FeatureCollection', features: [] }
+            });
+
+            // Filled polygons colored by 'risk' feature property.
+            mapInstance.addLayer({
+                id: 'risk-areas-fill',
+                type: 'fill',
+                source: 'risk-areas',
+                paint: {
+                    'fill-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['coalesce', ['to-number', ['get', 'risk']], 0],
+                        0, '#10b981',
+                        50, '#eab308',
+                        100, '#ef4444'
+                    ],
+                    'fill-opacity': 0.4,
+                }
+            });
+
+            // Outline for the polygons
+            mapInstance.addLayer({
+                id: 'risk-areas-outline',
+                type: 'line',
+                source: 'risk-areas',
+                paint: {
+                    'line-color': '#000000',
+                    'line-opacity': 0.2,
+                    'line-width': 1
+                }
+            });
+
+            // Add labels showing the risk percentage inside each polygon.
+            // FIXME: Duplicates the label when polygons are across multiple tiles
+            mapInstance.addLayer({
+                id: 'risk-areas-label',
+                type: 'symbol',
+                source: 'risk-areas',
+                layout: {
+                    'text-field': [
+                        'concat',
+                        ['to-string', ['round', ['coalesce', ['to-number', ['get', 'risk']], 0]]],
+                        '%'
+                    ],
+                    'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                    'text-size': 12,
+                    'text-anchor': 'center',
+                    'text-allow-overlap': true,
+                    'text-ignore-placement': true,
+                    'symbol-placement': 'point' // place at polygon centroid
+                },
+                paint: {
+                    'text-color': '#000000',
+                    'text-halo-color': '#ffffff',
+                    'text-halo-width': 1,
+                    'text-opacity': 0.7
+                },
+                minzoom: 10
+            });
+
+            // Initially hide the risk layers unless the viewMode is 'risk'
+            const initialVisibility = props.viewMode() === 'risk' ? 'visible' : 'none';
+            mapInstance.setLayoutProperty('risk-areas-fill', 'visibility', initialVisibility);
+            mapInstance.setLayoutProperty('risk-areas-outline', 'visibility', initialVisibility);
+            mapInstance.setLayoutProperty('risk-areas-label', 'visibility', initialVisibility);
+
             // Use MapboxOverlay so deck.gl layers are attached to the map and map drives the view
             const overlayInstance = new MapboxOverlay({
                 layers: createLayers()
@@ -131,6 +201,21 @@ const MapContainer: Component<MapContainerProps> = (props) => {
             mapInstance.addControl(overlayInstance);
             setOverlay(overlayInstance);
         });
+    });
+
+    // update the geojson source data and layer visibility reactively
+    createEffect(() => {
+        const m = map();
+        if (!m) return;
+
+        const src = m.getSource('risk-areas') as maplibregl.GeoJSONSource | undefined;
+        src?.setData(props.areas ?? { type: 'FeatureCollection', features: [] });
+
+        // toggle visibility depending on view mode
+        const visibility = props.viewMode() === 'risk' ? 'visible' : 'none';
+        if (m.getLayer('risk-areas-fill')) m.setLayoutProperty('risk-areas-fill', 'visibility', visibility);
+        if (m.getLayer('risk-areas-outline')) m.setLayoutProperty('risk-areas-outline', 'visibility', visibility);
+        if (m.getLayer('risk-areas-label')) m.setLayoutProperty('risk-areas-label', 'visibility', visibility);
     });
 
     // update layers when mode changes
