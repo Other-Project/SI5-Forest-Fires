@@ -11,4 +11,5 @@ RUN bun run build
 
 # Serve the built web UI with a static web server
 FROM joseluisq/static-web-server:2.40.1
+USER server
 COPY --from=builder /app/dist /public

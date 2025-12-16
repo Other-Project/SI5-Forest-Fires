@@ -125,6 +125,28 @@ services:
       - influxdb
     restart: unless-stopped
 
+
+## ---- Our services ---- ##
+
+  pretreatment:
+    build:
+      context: ./src/fog/pre-treatment
+      dockerfile: Dockerfile
+    networks:
+      - forest-fire-network
+    environment:
+      KAFKA_INPUT_TOPIC: raw
+      KAFKA_OUTPUT_TOPIC: data
+      KAFKA_BROKERS: redpanda:9092
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_BUCKET: stations
+    depends_on:
+      - redpanda
+      - minio
+    restart: unless-stopped
+
   webui:
     build:
       context: ./src/cloud/webui

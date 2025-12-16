@@ -1,0 +1,13 @@
+# Build the Rust application
+FROM rust:1.92.0-alpine as builder
+WORKDIR /app
+RUN apk update
+RUN apk add libc-dev openssl-dev openssl-libs-static build-base musl-dev pkgconfig perl cmake
+COPY . .
+RUN cargo build --release
+
+# Create a minimal runtime image
+FROM scratch
+USER server
+COPY --from=builder /app/target/release/pre-treatment /pre-treatment
+ENTRYPOINT ["/pre-treatment"]
