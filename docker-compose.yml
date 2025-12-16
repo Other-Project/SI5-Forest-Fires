@@ -112,7 +112,7 @@ services:
     image: chronograf:latest
     container_name: chronograf
     ports:
-      - "8888:8888"
+      - "8089:8888"
     environment:
       INFLUXDB_URL: http://influxdb:8086
       INFLUXDB_USERNAME: admin
@@ -123,6 +123,16 @@ services:
       - forest-fire-network
     depends_on:
       - influxdb
+    restart: unless-stopped
+
+  webui:
+    build:
+      context: ./src/cloud/webui
+      dockerfile: Dockerfile
+    ports:
+      - "8888:80"
+    networks:
+      - forest-fire-network
     restart: unless-stopped
 
 networks:
