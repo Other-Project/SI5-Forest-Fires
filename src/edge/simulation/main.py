@@ -9,8 +9,7 @@ import json
 import datetime
 import paho.mqtt.client as mqtt
 
-MQTT_BROKER = "test.mosquitto.org" # Broker public pour tester
-# MQTT_BROKER = "localhost"        # A décommenter si propre broker
+MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 KEEP_ALIVE = 60
 
@@ -220,7 +219,7 @@ def update(frame):
     for p in payloads:
         device_id = p['metadata']['device_id']
         payload_str = json.dumps(p)
-        topic = f"/captors/meteo/{device_id}/raw"
+        topic = f"/sensors/meteo/{device_id}/raw"
         client.publish(topic, payload_str)
         print(f"-> {device_id} | T:{p['temperature']}°C | Vent:{p['wind_direction']}°")
 

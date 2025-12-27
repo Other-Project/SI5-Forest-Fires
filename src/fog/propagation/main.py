@@ -8,8 +8,8 @@ import json
 import paho.mqtt.client as mqtt
 import random
 
-MQTT_BROKER = "test.mosquitto.org"
-TOPIC_SUBSCRIBE = "/captors/meteo/+/raw"
+MQTT_BROKER = "localhost"
+TOPIC_SUBSCRIBE = "/sensors/meteo/+/raw"
 GRID_SIZE = 50
 PREDICTION_STEPS = 10
 FIRE_THRESHOLD = 60.0
