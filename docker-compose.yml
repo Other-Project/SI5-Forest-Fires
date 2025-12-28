@@ -128,6 +128,19 @@ services:
 
 ## ---- Our services ---- ##
 
+  simulation:
+    build:
+      context: ./src/edge/simulation
+      dockerfile: Dockerfile
+    networks:
+      - forest-fire-network
+    environment:
+      MQTT_BROKER: mqtt-broker
+      MQTT_PORT: 1883
+    depends_on:
+      - mqtt-broker
+    restart: unless-stopped
+
   pretreatment:
     build:
       context: ./src/fog/pre-treatment
