@@ -1,4 +1,3 @@
-from time import sleep
 import numpy as np
 from dataclasses import dataclass
 import random
@@ -7,7 +6,6 @@ import json
 import datetime
 import os
 import paho.mqtt.client as mqtt
-# Add asyncio + threading
 import asyncio
 from threading import Thread, Event, Lock
 
