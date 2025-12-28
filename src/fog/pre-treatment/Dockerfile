@@ -3,6 +3,13 @@ FROM rust:1.92.0-alpine AS builder
 WORKDIR /app
 RUN apk update
 RUN apk add libc-dev openssl-dev openssl-libs-static build-base musl-dev pkgconfig perl cmake
+
+# Create a dummy project to cache dependencies
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release
+
+# Copy the actual project files and rebuild
 COPY . .
 RUN cargo build --release
 
