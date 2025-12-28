@@ -13,8 +13,6 @@ SIZE = int(os.getenv("SIZE", "50"))
 PLOT = os.getenv("PLOT", "True").lower() == "true"
 
 
-
-
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
 try:
@@ -46,7 +44,7 @@ async def sim_loop(max_steps=None):
         for p in payloads:
             device_id = p['metadata']['device_id']
             payload_str = json.dumps(p)
-            topic = f"/sensors/meteo/{device_id}/raw"
+            topic = f"sensors/meteo/{device_id}/raw"
             client.publish(topic, payload_str)
             print(f"-> {device_id} | T:{p['temperature']}°C | Vent:{p['wind_direction']}°")
 

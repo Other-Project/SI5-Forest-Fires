@@ -1,0 +1,18 @@
+input:
+  mqtt:
+    urls: ["tcp://mqtt-broker:1883"]
+    client_id: "redpanda_bridge_input"
+    topics: 
+      - "sensors/+/+/raw"
+
+pipeline:
+  processors:
+    - mutation: |
+        let source = meta("mqtt_topic")
+        meta target_topic = $source.replace("/", ".")
+
+output:
+  redpanda:
+    seed_brokers: ["redpanda:9092"]
+    topic: "${! meta(\"target_topic\") }"
+    key: "${! meta(\"target_topic\") }"

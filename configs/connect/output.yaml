@@ -1,0 +1,19 @@
+input:
+  redpanda:
+    seed_brokers: ["redpanda:9092"]
+    consumer_group: "mqtt_bridge_output_group"
+    regexp_topics: true
+    topics:
+      - "^sensors\\..*\\..*\\.config$"
+
+pipeline:
+  processors:
+    - mutation: |
+        let source = meta("kafka_topic")
+        meta target_topic = $source.replace(".", "/")
+
+output:
+  mqtt:
+    urls: ["tcp://mqtt-broker:1883"]
+    client_id: "redpanda_bridge_output"
+    topic: "${! meta(\"target_topic\") }"

@@ -9,7 +9,7 @@ services:
     volumes:
       - mosquitto-data:/mosquitto/data
       - mosquitto-logs:/mosquitto/log
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:Z
+      - ./configs/mosquitto.conf:/mosquitto/config/mosquitto.conf:Z
     networks:
       - forest-fire-network
     restart: unless-stopped
@@ -125,6 +125,22 @@ services:
       - influxdb
     restart: unless-stopped
 
+  redpanda-connect:
+    image: docker.redpanda.com/redpandadata/connect:latest
+    container_name: redpanda_connect
+    networks:
+      - forest-fire-network
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      mqtt-broker:
+        condition: service_started
+    volumes:
+      - ./configs/connect:/streams
+    command: ["streams", "/streams/*.yaml"]
+    ports:
+      - "4195:4195"
+
 
 ## ---- Our services ---- ##
 
@@ -182,3 +198,4 @@ volumes:
   influxdb-data:
   influxdb-config:
   chronograf-data:
+  connect-data:
