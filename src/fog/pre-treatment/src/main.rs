@@ -65,7 +65,7 @@ pub fn setup_logger(log_thread: bool, rust_log: Option<&String>) {
 }
 
 // Process weather data message
-async fn process_message(msg: OwnedMessage, minio_client: &MinioClient) -> Result<String, String> {
+async fn process_message(msg: OwnedMessage, minio_client: &MinioClient, minio_bucket: &str) -> Result<String, String> {
     info!("Processing message at offset {}", msg.offset());
 
     // Extract payload as byte array
@@ -79,7 +79,7 @@ async fn process_message(msg: OwnedMessage, minio_client: &MinioClient) -> Resul
 
     // Fetch station config from MinIO
     let station_config_bytes = minio_client
-        .get_object("stations", "50.json")
+        .get_object(minio_bucket, "50.json")
         .build().send().await
         .map_err(|e| format!("Failed to fetch station config from MinIO: {}", e))?
         .content()
@@ -111,6 +111,9 @@ async fn run_async_processor(
     input_topic: String,
     output_topic: String,
     minio_endpoint: String,
+    minio_access_key: String,
+    minio_secret_key: String,
+    minio_bucket: String,
 ) {
     // Create the `StreamConsumer`, to receive the messages from the topic in form of a `Stream`.
     let consumer: StreamConsumer = ClientConfig::new()
@@ -135,8 +138,8 @@ async fn run_async_processor(
 
     let base_url = minio_endpoint.parse::<BaseUrl>().unwrap();
     let static_provider = StaticProvider::new(
-        "minioadmin",
-        "minioadmin123",
+        &minio_access_key,
+        &minio_secret_key,
         None,
     );
     let minio_client =
@@ -147,6 +150,7 @@ async fn run_async_processor(
         let producer = producer.clone();
         let output_topic = output_topic.to_string();
         let minio_client = minio_client.clone();
+        let minio_bucket = minio_bucket.to_string();
         async move {
             info!("Message received at offset {}", borrowed_message.offset());
             let owned_message = borrowed_message.detach();
@@ -155,7 +159,7 @@ async fn run_async_processor(
                 let minio_client = minio_client.clone();
                 let process_handle =
                     tokio::spawn(
-                        async move { process_message(owned_message, &*minio_client).await },
+                        async move { process_message(owned_message, &*minio_client, &minio_bucket).await },
                     );
 
                 match process_handle.await {
@@ -240,6 +244,27 @@ async fn main() {
                 .help("MinIO endpoint URL")
                 .default_value("http://localhost:9000"),
         )
+        .arg(
+            Arg::new("minio-access-key")
+                .long("minio-access-key")
+                .env("MINIO_ACCESS_KEY")
+                .help("MinIO access key")
+                .default_value("minioadmin"),
+        )
+        .arg(
+            Arg::new("minio-secret-key")
+                .long("minio-secret-key")
+                .env("MINIO_SECRET_KEY")
+                .help("MinIO secret key")
+                .default_value("minioadmin123"),
+        )
+        .arg(
+            Arg::new("minio-bucket")
+                .long("minio-bucket")
+                .env("MINIO_BUCKET")
+                .help("MinIO bucket name")
+                .default_value("stations"),
+        )
         .get_matches();
 
     setup_logger(true, matches.get_one("log-conf"));
@@ -250,6 +275,11 @@ async fn main() {
     let output_topic = matches.get_one::<String>("output-topic").unwrap();
     let num_workers = *matches.get_one::<usize>("num-workers").unwrap();
     let minio_endpoint = matches.get_one::<String>("minio-endpoint").unwrap();
+    let minio_access_key = matches.get_one::<String>("minio-access-key").unwrap();
+    let minio_secret_key = matches.get_one::<String>("minio-secret-key").unwrap();
+    let minio_bucket = matches.get_one::<String>("minio-bucket").unwrap();
+
+    info!("Starting {} worker(s)", num_workers);
 
     (0..num_workers)
         .map(|_| {
@@ -259,6 +289,9 @@ async fn main() {
                 input_topic.to_owned(),
                 output_topic.to_owned(),
                 minio_endpoint.to_owned(),
+                minio_access_key.to_owned(),
+                minio_secret_key.to_owned(),
+                minio_bucket.to_owned(),
             ))
         })
         .collect::<FuturesUnordered<_>>()
