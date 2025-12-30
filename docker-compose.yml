@@ -165,7 +165,7 @@ services:
       - forest-fire-network
     environment:
       KAFKA_INPUT_TOPIC: "^sensors\\..*\\..*\\.raw$"
-      KAFKA_OUTPUT_TOPIC: "sensors.data"
+      KAFKA_OUTPUT_TOPIC: sensors.{device_id}.data
       KAFKA_BROKERS: redpanda:9092
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: minioadmin

@@ -29,3 +29,4 @@ clap = { version = "4.5.53", features = ["env"] }
 # Logs
 log = "0.4.29"
 env_logger = "0.11.8"
+strfmt = "0.2.5"

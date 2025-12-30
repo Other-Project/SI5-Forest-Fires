@@ -18,6 +18,7 @@ use rdkafka::Message;
 
 use env_logger::Builder;
 use log::LevelFilter;
+use strfmt::strfmt;
 use std::io::Write;
 
 mod messages;
@@ -65,7 +66,7 @@ pub fn setup_logger(log_thread: bool, rust_log: Option<&String>) {
 }
 
 // Process weather data message
-async fn process_message(msg: OwnedMessage, minio_client: &MinioClient, minio_bucket: &str) -> Result<String, String> {
+async fn process_message(msg: OwnedMessage, minio_client: &MinioClient, minio_bucket: &str) -> Result<(u16, String), String> {
     info!("Processing message at offset {}", msg.offset());
 
     // Extract payload as byte array
@@ -79,16 +80,16 @@ async fn process_message(msg: OwnedMessage, minio_client: &MinioClient, minio_bu
 
     // Fetch station config from MinIO
     let station_config_bytes = minio_client
-        .get_object(minio_bucket, "50.json")
+        .get_object(minio_bucket, format!("{}.json", raw_weather_data.metadata.device_id))
         .build().send().await
-        .map_err(|e| format!("Failed to fetch station config from MinIO: {}", e))?
+        .map_err(|e| format!("Failed to fetch station ({}) config from MinIO: {}", raw_weather_data.metadata.device_id, e))?
         .content()
-        .map_err(|e| format!("Failed to read station config content: {}", e))?
+        .map_err(|e| format!("Failed to read station ({}) config content: {}", raw_weather_data.metadata.device_id, e))?
         .to_segmented_bytes().await
-        .map_err(|e| format!("Failed to convert station config to bytes: {}", e))?
+        .map_err(|e| format!("Failed to convert station ({}) config to bytes: {}", raw_weather_data.metadata.device_id, e))?
         .to_bytes();
     let station_config: StationConfig = serde_json::from_slice(&station_config_bytes)
-        .map_err(|e| format!("Failed to parse station config JSON: {}", e))?;
+        .map_err(|e| format!("Failed to parse station ({}) config JSON: {}", raw_weather_data.metadata.device_id, e))?;
 
     // Process and convert to WeatherData
     let weather_data = process_weather_data(raw_weather_data, &station_config)
@@ -102,7 +103,7 @@ async fn process_message(msg: OwnedMessage, minio_client: &MinioClient, minio_bu
         "Successfully processed message from device {}",
         weather_data.metadata.device_id
     );
-    Ok(json)
+    Ok((weather_data.metadata.device_id, json))
 }
 
 async fn run_async_processor(
@@ -164,10 +165,13 @@ async fn run_async_processor(
 
                 match process_handle.await {
                     Ok(Ok(json_payload)) => {
-                        // Successfully processed - produce to output topic
+                        // Successfully processed
+                        let mut vars = std::collections::HashMap::new();
+                        vars.insert("device_id".to_string(), json_payload.0.to_string());
+                        let topic_name = strfmt(&output_topic, &vars).unwrap();
                         let produce_future = producer.send(
-                            FutureRecord::<(), [u8]>::to(&output_topic)
-                                .payload(json_payload.as_bytes()),
+                            FutureRecord::<(), [u8]>::to(topic_name.as_str())
+                                .payload(json_payload.1.as_bytes()),
                             Duration::from_secs(5),
                         );
                         match produce_future.await {
