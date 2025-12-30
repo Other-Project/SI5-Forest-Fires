@@ -1,20 +1,13 @@
 from environment import Environment
-from sensor import Sensor
 import datetime
 import numpy as np
 import random
+import struct
 
 class SimulationEngine:
-    def __init__(self, size=50, n_sensors=10):
+    def __init__(self, sensors, size=50):
         self.env = Environment(size)
-        self.sensors = []
-
-        for i in range(n_sensors):
-            sx = random.randint(0, size-1)
-            sy = random.randint(0, size-1)
-            s_id = f"{i:03d}"
-            self.sensors.append(Sensor(id=s_id, x=sx, y=sy))
-
+        self.sensors = sensors
         self.update_sensors()
 
     def start_fire(self, x, y):
@@ -41,9 +34,41 @@ class SimulationEngine:
 
             s.read_wind_d = self.env.wind_dir_map[s.y, s.x]
 
+    def payload_to_bytes(self, payload):
+        # Define the mapping of fields to struct format specifiers
+        field_mapping = [
+            ("metadata.device_id", "H"),  # u16
+            ("metadata.timestamp", "I"),  # u32
+            ("metadata.battery_voltage", "H"),  # u16
+            ("metadata.statut_bits", "B"),  # u8
+            ("temperature", "h"),  # i16
+            ("air_humidity", "B"),  # u8
+            ("soil_humidity", "B"),  # u8
+            ("air_pressure", "H"),  # u16
+            ("rain", "H"),  # u16
+            ("wind_speed", "B"),  # u8
+            ("wind_direction", "H"),  # u16
+        ]
+
+        # Build the format string dynamically
+        fmt = ">" + "".join(f[1] for f in field_mapping)
+
+        # Extract values from the payload based on the mapping
+        values = []
+        for field, _ in field_mapping:
+            keys = field.split(".")
+            value = payload
+            for key in keys:
+                value = value[key]
+            values.append(int(value))
+        
+        # Pack the data into bytes
+        return struct.pack(fmt, *values)
+
     def generate_sensor_payloads(self):
         payloads = []
-        now = datetime.datetime.now().isoformat()
+        now = datetime.datetime.now()
+        battery = 3.6
 
         for s in self.sensors:
             lat, lon = self.env.grid_to_gps(s.x, s.y)
@@ -52,25 +77,17 @@ class SimulationEngine:
             payload = {
                 "metadata": {
                     "device_id": s.id,
-                    "location": {
-                        "latitude": round(lat, 6),
-                        "longitude": round(lon, 6),
-                        "altitude": round(float(alt), 2)
-                    },
-                    "forest_area": "grand_sambuc",
-                    "timestamp": now,
-                    "processed_timestamp": now,
-                    "battery_voltage": 3.6,
-                    "is_charging": False,
-                    "data_quality_flag": "OK"
+                    "timestamp": now.timestamp(),
+                    "battery_voltage": int(battery * 100),
+                    "statut_bits": 0,
                 },
-                "temperature": round(float(s.read_temp), 2),
-                "air_humidity": round(float(s.read_air_hum), 2),
-                "soil_humidity": round(float(s.read_soil_hum), 2),
-                "air_pressure": round(float(s.read_pressure), 2),
-                "rain": round(float(s.read_rain), 2),
-                "wind_speed": round(float(s.read_wind_s), 2),
-                "wind_direction": int(s.read_wind_d)
+                "temperature": int((s.read_temp + 20.0) / 0.25),
+                "air_humidity": int(s.read_air_hum),
+                "soil_humidity": int(s.read_soil_hum ),
+                "air_pressure": int(s.read_pressure / 0.1),
+                "rain": int(s.read_rain / 0.2),
+                "wind_speed": int(s.read_wind_s / 0.2),
+                "wind_direction": int(s.read_wind_d / 0.5)
             }
             payloads.append(payload)
         return payloads
