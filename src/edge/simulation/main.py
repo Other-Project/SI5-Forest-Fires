@@ -5,6 +5,10 @@ import paho.mqtt.client as mqtt
 from engine import SimulationEngine
 import geojson
 import random
+import json
+from io import BytesIO
+from minio import Minio
+from minio.error import S3Error
 
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
@@ -12,16 +16,11 @@ KEEP_ALIVE = int(os.getenv("KEEP_ALIVE", "60"))
 
 PLOT = os.getenv("PLOT", "True").lower() == "true"
 
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-
-try:
-    print(f"Connecting to MQTT broker at '{MQTT_BROKER}'...")
-    client.connect(MQTT_BROKER, MQTT_PORT, KEEP_ALIVE)
-    client.loop_start()
-    print("Connected successfully!")
-except Exception as e:
-    print(f"Failed to connect to MQTT broker: {e}")
-    exit()
+MINIO = os.getenv("MINIO", "True").lower() == "true"
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "stations")
 
 
 def parse_geojson(file_path):
@@ -34,28 +33,84 @@ def parse_geojson(file_path):
             "height": 64,
             "sensors": [],
         }
-        
+
         for i, feature in enumerate(geojson_data.features):
             if feature.geometry.type == "Point":
                 coords = feature.geometry.coordinates
-                data["sensors"].append({
-                    "id": f"{i:03d}",
-                    "x": coords[0],
-                    "y": coords[1],
-                })
+                data["sensors"].append(
+                    {
+                        "device_id": i,
+                        "location": {
+                            "latitude": coords[1],
+                            "longitude": coords[0],
+                            "altitude": 0,
+                        },
+                        "forest_area": feature.properties.get("forest_area", "unknown"),
+                    }
+                )
         return data
     except Exception as e:
         print(f"Can't parse GeoJSON file: {e}")
         return None
 
 
+def upload_station_to_minio(minio_client, station):
+    try:
+        object_name=f"{station['device_id']}.json"
+        data_bytes = json.dumps(station).encode("utf-8")
+        minio_client.put_object(
+            bucket_name=MINIO_BUCKET,
+            object_name=object_name,
+            data=BytesIO(data_bytes),
+            length=len(data_bytes),
+            content_type="application/octet-stream",
+        )
+        print(f"Uploaded {MINIO_BUCKET}/{object_name} to MinIO")
+    except Exception as e:
+        print(f"Failed to upload to MinIO: {e}")
+
+
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+
+try:
+    print(f"Connecting to MQTT broker at '{MQTT_BROKER}'...")
+    client.connect(MQTT_BROKER, MQTT_PORT, KEEP_ALIVE)
+    client.loop_start()
+    print("Connected successfully!")
+except Exception as e:
+    print(f"Failed to connect to MQTT broker: {e}")
+    exit()
+
 GEOJSON_FILE = os.getenv("GEOJSON_FILE", "map.geojson")
 map = parse_geojson(GEOJSON_FILE)
 if map is None:
     exit(1)
 
+if MINIO:
+    try:
+        minio_client = Minio(
+            MINIO_ENDPOINT,
+            access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY,
+            secure=False,
+        )
+        print(f"Connected to MinIO at '{MINIO_ENDPOINT}'")
+
+        found = minio_client.bucket_exists(MINIO_BUCKET)
+        if not found:
+            minio_client.make_bucket(MINIO_BUCKET)
+            print(f"Created bucket '{MINIO_BUCKET}'")
+
+        for station in map["sensors"]:
+            upload_station_to_minio(minio_client, station)
+    except S3Error as e:
+        print(f"Failed to connect to MinIO: {e}")
+        exit(1)
+
 sim = SimulationEngine(map)
-sim.start_fire(x=random.randint(0, map["width"]-1), y=random.randint(0, map["height"]-1))
+sim.start_fire(
+    x=random.randint(0, map["width"] - 1), y=random.randint(0, map["height"] - 1)
+)
 
 # New: shared-state lock and stop event
 env_lock = Lock()

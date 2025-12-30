@@ -14,9 +14,9 @@ class SimulationEngine:
 
         self.sensors = [
             Sensor(
-                id=s["id"],
-                x=int((s["x"] - map["bbox"][0]) / self.x_unit),
-                y=int((s["y"] - map["bbox"][1]) / self.y_unit),
+                id=s["device_id"],
+                x=int((s["location"]["longitude"] - map["bbox"][0]) / self.x_unit),
+                y=int((s["location"]["latitude"] - map["bbox"][1]) / self.y_unit),
             )
             for s in map["sensors"]
         ]
