@@ -2,38 +2,31 @@ import numpy as np
 import scipy.ndimage
 
 class Environment:
-    def __init__(self, size=50):
-        self.size = size
-
-        self.min_lat, self.max_lat = 43.5, 43.6
-        self.min_lon, self.max_lon = 7.0, 7.1
+    def __init__(self, x_size=50, y_size=50):
+        self.x_size = x_size
+        self.y_size = y_size
 
         self.altitude_map = self._generate_smooth_map(100, 500, sigma=3)
         self.temp_map = self._generate_smooth_map(20, 30, sigma=5)
         self.air_hum_map = self._generate_smooth_map(20, 60, sigma=4)
         self.soil_hum_map = self._generate_smooth_map(15, 50, sigma=4)
         self.pressure_map = 1013.0 - (self.altitude_map / 8.3)
-        self.rain_map = np.zeros((size, size))
+        self.rain_map = np.zeros((x_size, y_size))
 
-        self.wind_speed_map = np.full((size, size), 30.0)
-        self.wind_dir_map = np.full((size, size), 135.0) #nord-est
+        self.wind_speed_map = np.full((x_size, y_size), 30.0)
+        self.wind_dir_map = np.full((x_size, y_size), 135.0) #nord-est
 
-        self.fire_grid = np.zeros((size, size))
+        self.fire_grid = np.zeros((x_size, y_size))
 
     def _generate_smooth_map(self, low, high, sigma):
-        raw = np.random.uniform(low, high, (self.size, self.size))
+        raw = np.random.uniform(low, high, (self.x_size, self.y_size))
         return scipy.ndimage.gaussian_filter(raw, sigma=sigma)
 
-    def grid_to_gps(self, x, y):
-        lat = self.min_lat + (y / self.size) * (self.max_lat - self.min_lat)
-        lon = self.min_lon + (x / self.size) * (self.max_lon - self.min_lon)
-        return lat, lon
-
     def evolve_wind(self):
-        delta_dir = np.random.uniform(-2, 2, (self.size, self.size))
+        delta_dir = np.random.uniform(-2, 2, (self.x_size, self.y_size))
         self.wind_dir_map = (self.wind_dir_map + delta_dir) % 360
 
-        delta_speed = np.random.uniform(-1, 1, (self.size, self.size))
+        delta_speed = np.random.uniform(-1, 1, (self.x_size, self.y_size))
         self.wind_speed_map = np.clip(self.wind_speed_map + delta_speed, 0, 100)
 
     def apply_heat_from_fire(self):

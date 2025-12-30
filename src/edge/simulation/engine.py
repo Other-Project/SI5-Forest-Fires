@@ -1,3 +1,4 @@
+from sensor import Sensor
 from environment import Environment
 import datetime
 import numpy as np
@@ -5,23 +6,37 @@ import random
 import struct
 
 class SimulationEngine:
-    def __init__(self, sensors, size=50):
-        self.env = Environment(size)
-        self.sensors = sensors
+    def __init__(self, map):
+        self.env = Environment(map["width"], map["height"])
+
+        self.x_unit = (map["bbox"][2] - map["bbox"][0]) / map["width"]
+        self.y_unit = (map["bbox"][3] - map["bbox"][1]) / map["height"]
+
+        self.sensors = [
+            Sensor(
+                id=s["id"],
+                x=int((s["x"] - map["bbox"][0]) / self.x_unit),
+                y=int((s["y"] - map["bbox"][1]) / self.y_unit),
+            )
+            for s in map["sensors"]
+        ]
+
+        print(f"Initialized simulation of size {self.env.x_size}x{self.env.y_size} with {len(self.sensors)} sensors.")
+
         self.update_sensors()
 
     def start_fire(self, x, y):
+        print(f"Starting fire at ({x}, {y})")
         self.env.fire_grid[y, x] = 1
 
     def update_sensors(self):
         r = 2
-        limit = self.env.size
 
         for s in self.sensors:
             y_min = max(0, s.y - r)
-            y_max = min(limit, s.y + r + 1)
+            y_max = min(self.env.y_size, s.y + r + 1)
             x_min = max(0, s.x - r)
-            x_max = min(limit, s.x + r + 1)
+            x_max = min(self.env.x_size, s.x + r + 1)
 
             local_temps = self.env.temp_map[y_min:y_max, x_min:x_max]
             s.read_temp = np.max(local_temps)
@@ -61,7 +76,7 @@ class SimulationEngine:
             for key in keys:
                 value = value[key]
             values.append(int(value))
-        
+
         # Pack the data into bytes
         return struct.pack(fmt, *values)
 
@@ -71,9 +86,6 @@ class SimulationEngine:
         battery = 3.6
 
         for s in self.sensors:
-            lat, lon = self.env.grid_to_gps(s.x, s.y)
-            alt = self.env.altitude_map[s.y, s.x]
-
             payload = {
                 "metadata": {
                     "device_id": s.id,
@@ -83,11 +95,11 @@ class SimulationEngine:
                 },
                 "temperature": int((s.read_temp + 20.0) / 0.25),
                 "air_humidity": int(s.read_air_hum),
-                "soil_humidity": int(s.read_soil_hum ),
+                "soil_humidity": int(s.read_soil_hum),
                 "air_pressure": int(s.read_pressure / 0.1),
                 "rain": int(s.read_rain / 0.2),
                 "wind_speed": int(s.read_wind_s / 0.2),
-                "wind_direction": int(s.read_wind_d / 0.5)
+                "wind_direction": int(s.read_wind_d / 0.5),
             }
             payloads.append(payload)
         return payloads
@@ -101,9 +113,10 @@ class SimulationEngine:
             new_fire[r, c] = -1
             for dr in [-1, 0, 1]:
                 for dc in [-1, 0, 1]:
-                    if dr==0 and dc==0: continue
-                    nr, nc = r+dr, c+dc
-                    if 0 <= nr < self.env.size and 0 <= nc < self.env.size:
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < self.env.y_size and 0 <= nc < self.env.x_size:
                         if self.env.fire_grid[nr, nc] == 0:
                             prob = self.env.get_probability(r, c, nr, nc)
                             if random.random() < prob:

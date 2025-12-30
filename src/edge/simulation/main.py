@@ -3,31 +3,59 @@ import asyncio
 from threading import Thread, Event, Lock
 import paho.mqtt.client as mqtt
 from engine import SimulationEngine
-from sensor import Sensor
+import geojson
 import random
 
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 KEEP_ALIVE = int(os.getenv("KEEP_ALIVE", "60"))
 
-SIZE = int(os.getenv("SIZE", "50"))
 PLOT = os.getenv("PLOT", "True").lower() == "true"
 
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
 try:
-    print(f"Connexion au broker MQTT {MQTT_BROKER}...")
+    print(f"Connecting to MQTT broker at '{MQTT_BROKER}'...")
     client.connect(MQTT_BROKER, MQTT_PORT, KEEP_ALIVE)
     client.loop_start()
-    print("Connecté avec succès !")
+    print("Connected successfully!")
 except Exception as e:
-    print(f"ERREUR: Impossible de se connecter au broker MQTT. {e}")
+    print(f"Failed to connect to MQTT broker: {e}")
     exit()
 
-sensors = [Sensor(id=f"{i:03d}", x=random.randint(0, SIZE - 1), y=random.randint(0, SIZE - 1)) for i in range(10)]
 
-sim = SimulationEngine(sensors=sensors, size=SIZE)
-sim.start_fire(25, 25)
+def parse_geojson(file_path):
+    try:
+        with open(file_path, "r") as f:
+            geojson_data = geojson.load(f)
+        data = {
+            "bbox": geojson_data.bbox,
+            "width": 64,
+            "height": 64,
+            "sensors": [],
+        }
+        
+        for i, feature in enumerate(geojson_data.features):
+            if feature.geometry.type == "Point":
+                coords = feature.geometry.coordinates
+                data["sensors"].append({
+                    "id": f"{i:03d}",
+                    "x": coords[0],
+                    "y": coords[1],
+                })
+        return data
+    except Exception as e:
+        print(f"Can't parse GeoJSON file: {e}")
+        return None
+
+
+GEOJSON_FILE = os.getenv("GEOJSON_FILE", "map.geojson")
+map = parse_geojson(GEOJSON_FILE)
+if map is None:
+    exit(1)
+
+sim = SimulationEngine(map)
+sim.start_fire(x=random.randint(0, map["width"]-1), y=random.randint(0, map["height"]-1))
 
 # New: shared-state lock and stop event
 env_lock = Lock()
@@ -42,15 +70,12 @@ async def sim_loop(max_steps=None):
             sim.step()
             payloads = sim.generate_sensor_payloads()
 
-        print(f"\n--- STEP {step_count} ---")
+        print(f"Step {step_count}")
         for p in payloads:
             device_id = p["metadata"]["device_id"]
             payload = sim.payload_to_bytes(p)
             topic = f"sensors/meteo/{device_id}/raw"
             client.publish(topic, payload)
-            print(
-                f"-> {device_id} | T:{p['temperature']}°C | Vent:{p['wind_direction']}°"
-            )
 
         step_count += 1
         if max_steps is not None and step_count >= max_steps:
@@ -102,7 +127,7 @@ else:
         pass
 
 # Clean exit
-print("Arrêt de la simulation...")
+print("Stopping simulation...")
 stop_event.set()
 sim_thread.join(timeout=5)
 client.loop_stop()
