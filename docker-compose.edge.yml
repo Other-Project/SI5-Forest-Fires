@@ -1,0 +1,19 @@
+services:
+  simulation:
+    build:
+      context: ./src/edge/simulation
+      dockerfile: Dockerfile
+    networks:
+      - forest-fire-network
+    environment:
+      MQTT_BROKER: mqtt-broker
+      MQTT_PORT: 1883
+      MINIO: True
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_BUCKET: stations
+    depends_on:
+      - mqtt-broker
+      - minio
+    restart: unless-stopped
