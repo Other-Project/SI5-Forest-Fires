@@ -1,0 +1,30 @@
+input:
+  redpanda:
+    seed_brokers: ["redpanda:9092"]
+    consumer_group: "influxdb_bridge_group"
+    regexp_topics: true
+    topics:
+      - "^sensors\\..*\\..*\\.raw$"
+
+pipeline:
+  processors:
+    - mapping: |
+        # 1. Variables de base
+        let parts = meta("kafka_topic").split(".")
+        let loc = $parts.index(1)
+        let sid = $parts.index(2)
+        
+        # 2. On aplatit le JSON
+        let flat = this.flatten()
+        
+        # 3. Construction des champs
+        let fields = $flat.map_each(item -> match {
+            item.value.type() == "string" => "%s=\"%s\"".format(item.key, item.value),
+            _ => "%s=%s".format(item.key, item.value.string())
+        }).values().join(",")
+        
+        # 4. Construction finale
+        root = "sensor_data,location=%s,sensor_id=%s %s".format($loc, $sid, $fields)
+
+output:
+  stdout: {}
