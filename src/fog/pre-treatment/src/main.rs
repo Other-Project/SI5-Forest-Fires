@@ -23,6 +23,12 @@ async fn main() {
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Pretreatment service for processing station data")
         .arg(
+            Arg::new("log-conf")
+                .long("log-conf")
+                .env("RUST_LOG")
+                .help("Configure the logging level"),
+        )
+        .arg(
             Arg::new("brokers")
                 .short('b')
                 .long("brokers")
@@ -36,13 +42,7 @@ async fn main() {
                 .long("group-id")
                 .env("KAFKA_GROUP_ID")
                 .help("Consumer group id")
-                .default_value("example_consumer_group_id"),
-        )
-        .arg(
-            Arg::new("log-conf")
-                .long("log-conf")
-                .env("RUST_LOG")
-                .help("Configure the logging format (example: 'rdkafka=trace')"),
+                .default_value("pre_treatment"),
         )
         .arg(
             Arg::new("input-topic")

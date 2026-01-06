@@ -16,6 +16,12 @@ async fn main() {
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("GeoJSON Producer service for processing map data")
         .arg(
+            Arg::new("log-conf")
+                .long("log-conf")
+                .env("RUST_LOG")
+                .help("Configure the logging level"),
+        )
+        .arg(
             Arg::new("brokers")
                 .short('b')
                 .long("brokers")
@@ -30,12 +36,6 @@ async fn main() {
                 .env("KAFKA_GROUP_ID")
                 .help("Consumer group id")
                 .default_value("geojson_producer"),
-        )
-        .arg(
-            Arg::new("log-conf")
-                .long("log-conf")
-                .env("RUST_LOG")
-                .help("Configure the logging format (example: 'rdkafka=trace')"),
         )
         .arg(
             Arg::new("input-topic")
@@ -120,4 +120,3 @@ async fn main() {
         .for_each(|_| async {})
         .await
 }
-

@@ -31,5 +31,5 @@ pub fn setup_logger(log_thread: bool, rust_log: Option<&String>) {
         )
     });
 
-    builder.init();
+    builder.try_init().or_else(|e| Err(eprintln!("Failed to initialize logger: {}", e))).ok();
 }
