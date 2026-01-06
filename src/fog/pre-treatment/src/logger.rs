@@ -14,7 +14,6 @@ pub fn setup_logger(log_thread: bool, rust_log: Option<&String>) {
 
     builder.filter_level(filter_level);
 
-    // Simplified format to avoid version compatibility issues with env_logger::fmt::Color
     builder.format(move |buf, record| {
         let thread_name = if log_thread {
             format!(" [{:?}]", std::thread::current().id())

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use futures::TryStreamExt;
-use log::info;
+use futures::StreamExt;
+use log::{error, info, warn};
 
 use minio::s3::creds::StaticProvider;
 use minio::s3::http::BaseUrl;
@@ -10,6 +10,7 @@ use minio::s3::MinioClient;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::consumer::Consumer;
+use rdkafka::error::{RDKafkaErrorCode};
 use rdkafka::message::OwnedMessage;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::Message;
@@ -21,7 +22,11 @@ use crate::process::process_weather_data;
 use crate::station_config::StationConfig;
 
 // Process weather data message
-async fn process_message(msg: OwnedMessage, minio_client: &MinioClient, minio_bucket: &str) -> Result<(u16, String), String> {
+async fn process_message(
+    msg: OwnedMessage,
+    minio_client: &MinioClient,
+    minio_bucket: &str,
+) -> Result<(u16, String), String> {
     info!("Processing message at offset {}", msg.offset());
 
     // Extract payload as byte array
@@ -35,21 +40,47 @@ async fn process_message(msg: OwnedMessage, minio_client: &MinioClient, minio_bu
 
     // Fetch station config from MinIO
     let station_config_bytes = minio_client
-        .get_object(minio_bucket, format!("{}.json", raw_weather_data.metadata.device_id))
-        .build().send().await
-        .map_err(|e| format!("Failed to fetch station ({}) config from MinIO: {}", raw_weather_data.metadata.device_id, e))?
+        .get_object(
+            minio_bucket,
+            format!("{}.json", raw_weather_data.metadata.device_id),
+        )
+        .build()
+        .send()
+        .await
+        .map_err(|e| {
+            format!(
+                "Failed to fetch station ({}) config from MinIO: {}",
+                raw_weather_data.metadata.device_id, e
+            )
+        })?
         .content()
-        .map_err(|e| format!("Failed to read station ({}) config content: {}", raw_weather_data.metadata.device_id, e))?
-        .to_segmented_bytes().await
-        .map_err(|e| format!("Failed to convert station ({}) config to bytes: {}", raw_weather_data.metadata.device_id, e))?
+        .map_err(|e| {
+            format!(
+                "Failed to read station ({}) config content: {}",
+                raw_weather_data.metadata.device_id, e
+            )
+        })?
+        .to_segmented_bytes()
+        .await
+        .map_err(|e| {
+            format!(
+                "Failed to convert station ({}) config to bytes: {}",
+                raw_weather_data.metadata.device_id, e
+            )
+        })?
         .to_bytes();
-    let station_config: StationConfig = serde_json::from_slice(&station_config_bytes)
-        .map_err(|e| format!("Failed to parse station ({}) config JSON: {}", raw_weather_data.metadata.device_id, e))?;
+    let station_config: StationConfig =
+        serde_json::from_slice(&station_config_bytes).map_err(|e| {
+            format!(
+                "Failed to parse station ({}) config JSON: {}",
+                raw_weather_data.metadata.device_id, e
+            )
+        })?;
 
     // Process and convert to WeatherData
     let weather_data = process_weather_data(raw_weather_data, &station_config)
         .map_err(|e| format!("Failed to process weather data: {}", e))?;
-    
+
     // Serialize to JSON for publishing
     let json =
         serde_json::to_string(&weather_data).map_err(|e| format!("Failed to serialize: {}", e))?;
@@ -78,6 +109,7 @@ pub async fn run_async_processor(
         .set("enable.partition.eof", "false")
         .set("session.timeout.ms", "6000")
         .set("enable.auto.commit", "false")
+        .set("topic.metadata.refresh.interval.ms", "10000")
         .create()
         .expect("Consumer creation failed");
 
@@ -93,56 +125,66 @@ pub async fn run_async_processor(
         .expect("Producer creation error");
 
     let base_url = minio_endpoint.parse::<BaseUrl>().unwrap();
-    let static_provider = StaticProvider::new(
-        &minio_access_key,
-        &minio_secret_key,
-        None,
-    );
+    let static_provider = StaticProvider::new(&minio_access_key, &minio_secret_key, None);
     let minio_client =
         std::sync::Arc::new(MinioClient::new(base_url, Some(static_provider), None, None).unwrap());
 
-    // Create the outer pipeline on the message stream.
-    let stream_processor = consumer.stream().try_for_each(|borrowed_message| {
-        let producer = producer.clone();
-        let output_topic = output_topic.to_string();
-        let minio_client = minio_client.clone();
-        let minio_bucket = minio_bucket.to_string();
-        async move {
-            info!("Message received at offset {}", borrowed_message.offset());
-            let owned_message = borrowed_message.detach();
-            tokio::spawn(async move {
-                // Process the message in an async task (await the async function)
+    info!(
+        "Starting event loop, waiting for topics matching: {}",
+        input_topic
+    );
+
+    let mut stream = consumer.stream();
+    while let Some(message_result) = stream.next().await {
+        match message_result {
+            Ok(borrowed_message) => {
+                let producer = producer.clone();
+                let output_topic = output_topic.clone();
                 let minio_client = minio_client.clone();
-                let process_handle =
-                    tokio::spawn(
-                        async move { process_message(owned_message, &*minio_client, &minio_bucket).await },
-                    );
+                let minio_bucket = minio_bucket.clone();
 
-                match process_handle.await {
-                    Ok(Ok(json_payload)) => {
-                        // Successfully processed
-                        let mut vars = std::collections::HashMap::new();
-                        vars.insert("device_id".to_string(), json_payload.0.to_string());
-                        let topic_name = strfmt(&output_topic, &vars).unwrap();
-                        let produce_future = producer.send(
-                            FutureRecord::<(), [u8]>::to(topic_name.as_str())
-                                .payload(json_payload.1.as_bytes()),
-                            Duration::from_secs(5),
-                        );
-                        match produce_future.await {
-                            Ok(delivery) => info!("Published message: {:?}", delivery),
-                            Err((e, _)) => eprintln!("Failed to publish message: {:?}", e),
+                info!("Message received at offset {}", borrowed_message.offset());
+                let owned_message = borrowed_message.detach();
+                tokio::spawn(async move {
+                    let process_handle = tokio::spawn(async move {
+                        process_message(owned_message, &*minio_client, &minio_bucket).await
+                    });
+
+                    match process_handle.await {
+                        Ok(Ok(json_payload)) => {
+                            let mut vars: std::collections::HashMap<String, String> =
+                                std::collections::HashMap::new();
+                            vars.insert("device_id".to_string(), json_payload.0.to_string());
+                            
+                            if let Ok(topic_name) = strfmt(&output_topic, &vars) {
+                            let produce_future = producer.send(
+                                FutureRecord::<(), [u8]>::to(topic_name.as_str())
+                                    .payload(json_payload.1.as_bytes()),
+                                Duration::from_secs(5),
+                            );
+                            match produce_future.await {
+                                Ok(delivery) => info!("Published message: {:?}", delivery),
+                                    Err((e, _)) => error!("Failed to publish message: {:?}", e),
+                                }
+                            } else {
+                                error!("Failed to format output topic string: {}", output_topic);
+                            }
                         }
+                        Ok(Err(e)) => error!("Failed to process message logic: {}", e),
+                        Err(e) => error!("Task join error: {}", e),
                     }
-                    Ok(Err(e)) => eprintln!("Failed to process message: {}", e),
-                    Err(e) => eprintln!("Task join error: {}", e),
-                }
-            });
-            Ok(())
+                });
+            }
+            Err(e) => match e.rdkafka_error_code() {
+                Some(RDKafkaErrorCode::UnknownTopicOrPartition) => {
+                    warn!("Topic matching regex not found yet. Waiting...");
+            }
+                _ => {
+                error!("Error receiving message: {:?}", e);
+            }
+            },
         }
-    });
+    }
 
-    info!("Starting event loop");
-    stream_processor.await.expect("stream processing failed");
     info!("Stream processing terminated");
 }

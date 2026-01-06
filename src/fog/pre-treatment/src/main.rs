@@ -21,7 +21,7 @@ use crate::minio_worker::run_async_processor;
 async fn main() {
     let matches = Command::new("Pretreatment")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
-        .about("Asynchronous computation example")
+        .about("Pretreatment service for processing station data")
         .arg(
             Arg::new("brokers")
                 .short('b')

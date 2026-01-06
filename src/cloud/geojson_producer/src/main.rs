@@ -12,9 +12,9 @@ use crate::minio_worker::run_async_processor;
 
 #[tokio::main]
 async fn main() {
-    let matches = Command::new("Pretreatment")
+    let matches = Command::new("GeoJSON Producer")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
-        .about("Asynchronous computation example")
+        .about("GeoJSON Producer service for processing map data")
         .arg(
             Arg::new("brokers")
                 .short('b')

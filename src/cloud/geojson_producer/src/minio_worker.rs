@@ -1,25 +1,30 @@
 use std::time::Duration;
 
-use futures::TryStreamExt;
-use log::info;
+use futures::StreamExt;
+use log::{error, info, warn};
 
+use minio::s3::MinioClient;
 use minio::s3::creds::StaticProvider;
 use minio::s3::http::BaseUrl;
 use minio::s3::types::S3Api;
-use minio::s3::MinioClient;
+use rdkafka::Message;
 use rdkafka::config::ClientConfig;
-use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::consumer::Consumer;
+use rdkafka::consumer::stream_consumer::StreamConsumer;
+use rdkafka::error::{RDKafkaErrorCode};
 use rdkafka::message::OwnedMessage;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use rdkafka::Message;
 
 use strfmt::strfmt;
 
-use crate::process::{gen_geojson};
+use crate::process::gen_geojson;
 
 // Process weather data message
-async fn process_message(msg: OwnedMessage, minio_client: &MinioClient, minio_bucket: &str) -> Result<String, String> {
+async fn process_message(
+    msg: OwnedMessage,
+    minio_client: &MinioClient,
+    minio_bucket: &str,
+) -> Result<String, String> {
     info!("Processing message at offset {}", msg.offset());
 
     // Extract payload as byte array
@@ -51,6 +56,7 @@ pub async fn run_async_processor(
         .set("enable.partition.eof", "false")
         .set("session.timeout.ms", "6000")
         .set("enable.auto.commit", "false")
+        .set("topic.metadata.refresh.interval.ms", "10000")
         .create()
         .expect("Consumer creation failed");
 
@@ -66,57 +72,66 @@ pub async fn run_async_processor(
         .expect("Producer creation error");
 
     let base_url = minio_endpoint.parse::<BaseUrl>().unwrap();
-    let static_provider = StaticProvider::new(
-        &minio_access_key,
-        &minio_secret_key,
-        None,
-    );
+    let static_provider = StaticProvider::new(&minio_access_key, &minio_secret_key, None);
     let minio_client =
         std::sync::Arc::new(MinioClient::new(base_url, Some(static_provider), None, None).unwrap());
 
-    // Create the outer pipeline on the message stream.
-    let stream_processor = consumer.stream().try_for_each(|borrowed_message| {
-        let producer = producer.clone();
-        let output_topic = output_topic.to_string();
-        let minio_client = minio_client.clone();
-        let minio_bucket = minio_bucket.to_string();
-        async move {
-            info!("Message received at offset {}", borrowed_message.offset());
-            let owned_message = borrowed_message.detach();
-            tokio::spawn(async move {
-                // Process the message in an async task (await the async function)
+    info!(
+        "Starting event loop, waiting for topics matching: {}",
+        input_topic
+    );
+
+    let mut stream = consumer.stream();
+    while let Some(message_result) = stream.next().await {
+        match message_result {
+            Ok(borrowed_message) => {
+                let producer = producer.clone();
+                let output_topic = output_topic.clone();
                 let minio_client = minio_client.clone();
-                let process_handle =
-                    tokio::spawn(
-                        async move { process_message(owned_message, &*minio_client, &minio_bucket).await },
-                    );
+                let minio_bucket = minio_bucket.clone();
 
-                match process_handle.await {
-                    Ok(Ok(json_payload)) => {
-                        // Successfully processed
-                        let vars: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+                info!("Message received at offset {}", borrowed_message.offset());
+                let owned_message = borrowed_message.detach();
 
+                tokio::spawn(async move {
+                    let process_handle = tokio::spawn(async move {
+                        process_message(owned_message, &*minio_client, &minio_bucket).await
+                    });
 
-                        let topic_name = strfmt(&output_topic, &vars).unwrap();
-                        let produce_future = producer.send(
-                            FutureRecord::<(), [u8]>::to(topic_name.as_str())
-                                .payload(json_payload.as_bytes()),
-                            Duration::from_secs(5),
-                        );
-                        match produce_future.await {
-                            Ok(delivery) => info!("Published message: {:?}", delivery),
-                            Err((e, _)) => eprintln!("Failed to publish message: {:?}", e),
+                    match process_handle.await {
+                        Ok(Ok(json_payload)) => {
+                            let vars: std::collections::HashMap<String, String> =
+                                std::collections::HashMap::new();
+
+                            if let Ok(topic_name) = strfmt(&output_topic, &vars) {
+                                let produce_future = producer.send(
+                                    FutureRecord::<(), [u8]>::to(topic_name.as_str())
+                                        .payload(json_payload.as_bytes()),
+                                    Duration::from_secs(5),
+                                );
+                                match produce_future.await {
+                                    Ok(delivery) => info!("Published message: {:?}", delivery),
+                                    Err((e, _)) => error!("Failed to publish message: {:?}", e),
+                                }
+                            } else {
+                                error!("Failed to format output topic string: {}", output_topic);
+                            }
                         }
+                        Ok(Err(e)) => error!("Failed to process message logic: {}", e),
+                        Err(e) => error!("Task join error: {}", e),
                     }
-                    Ok(Err(e)) => eprintln!("Failed to process message: {}", e),
-                    Err(e) => eprintln!("Task join error: {}", e),
+                });
+            }
+            Err(e) => match e.rdkafka_error_code() {
+                Some(RDKafkaErrorCode::UnknownTopicOrPartition) => {
+                    warn!("Topic matching regex not found yet. Waiting...");
                 }
-            });
-            Ok(())
+                _ => {
+                    error!("Error receiving message: {:?}", e);
+                }
+            },
         }
-    });
+    }
 
-    info!("Starting event loop");
-    stream_processor.await.expect("stream processing failed");
     info!("Stream processing terminated");
 }
