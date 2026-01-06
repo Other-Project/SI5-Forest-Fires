@@ -194,7 +194,7 @@ async fn run_async_processor(
 
 #[tokio::main]
 async fn main() {
-    let matches = Command::new("Async example")
+    let matches = Command::new("Pretreatment")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Asynchronous computation example")
         .arg(
@@ -203,7 +203,7 @@ async fn main() {
                 .long("brokers")
                 .env("KAFKA_BROKERS")
                 .help("Broker list in kafka format")
-                .default_value("localhost:9092"),
+                .default_value("localhost:19092"),
         )
         .arg(
             Arg::new("group-id")
@@ -224,14 +224,14 @@ async fn main() {
                 .long("input-topic")
                 .env("KAFKA_INPUT_TOPIC")
                 .help("Input topic")
-                .required(true),
+                .default_value("^sensors\\.meteo\\..*\\.raw$"),
         )
         .arg(
             Arg::new("output-topic")
                 .long("output-topic")
                 .env("KAFKA_OUTPUT_TOPIC")
                 .help("Output topic")
-                .required(true),
+                .default_value("sensors.meteo.{device_id}.data"),
         )
         .arg(
             Arg::new("num-workers")
