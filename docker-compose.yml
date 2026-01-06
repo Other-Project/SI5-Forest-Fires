@@ -136,7 +136,7 @@ services:
       mqtt-broker:
         condition: service_started
     volumes:
-      - ./configs/connect:/streams
+      - ./configs/connect:/streams:Z
     command: ["streams", "/streams/*.yaml"]
     ports:
       - "4195:4195"
