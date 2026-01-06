@@ -18,6 +18,18 @@ services:
       - minio
     restart: unless-stopped
 
+  propagation:
+    build:
+      context: ./src/fog/propagation
+      dockerfile: Dockerfile
+    networks:
+      - forest-fire-network
+    environment:
+      REDPANDA_BROKER: redpanda:9092
+    depends_on:
+      - redpanda
+    restart: unless-stopped
+
   # MQTT Broker - Entry point for edge device data
   mqtt-broker:
     image: eclipse-mosquitto:latest
