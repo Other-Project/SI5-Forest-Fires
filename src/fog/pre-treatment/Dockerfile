@@ -1,20 +1,24 @@
-# Build the Rust application
-FROM rust:1.92.0-alpine AS builder
+# Use cargo-chef to cache dependencies and speed up builds
+FROM lukemathwalker/cargo-chef:latest-rust-1.92-alpine AS chef
+RUN apk add --no-cache libc-dev openssl-dev openssl-libs-static build-base musl-dev pkgconfig perl cmake
 WORKDIR /app
-RUN apk update
-RUN apk add libc-dev openssl-dev openssl-libs-static build-base musl-dev pkgconfig perl cmake
 
-# Create a dummy project to cache dependencies
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-
-# Copy the actual project files and rebuild
+# Generate the recipe file
+FROM chef AS planner
 COPY . .
-RUN cargo build --release
+RUN cargo chef prepare --recipe-path recipe.json
 
-# Create a minimal runtime image
+FROM chef AS builder
+# Build the dependencies specified in the recipe file
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
+# Build the application
+COPY . .
+ENV OPENSSL_STATIC=1
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+# Create the final lightweight image
 FROM scratch
 USER 1000:1000
-COPY --from=builder /app/target/release/pre-treatment /pre-treatment
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/pre-treatment /pre-treatment
 ENTRYPOINT ["/pre-treatment"]
