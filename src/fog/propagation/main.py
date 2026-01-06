@@ -5,18 +5,26 @@ from scipy.interpolate import griddata
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.animation as animation
 import json
-import paho.mqtt.client as mqtt
+from kafka import KafkaConsumer
+from kafka.errors import KafkaError
 import random
+import threading
+import time
+import re
+import os
+import datetime
 
-MQTT_BROKER = "localhost"
-TOPIC_SUBSCRIBE = "/sensors/meteo/+/raw"
+REDPANDA_BROKER = os.getenv("REDPANDA_BROKER", "localhost:19092")
+
 GRID_SIZE = 50
 PREDICTION_STEPS = 10
 FIRE_THRESHOLD = 60.0
 
 @dataclass
 class LocationData:
-    latitude: float; longitude: float; altitude: float
+    latitude: float
+    longitude: float
+    altitude: float
 
 @dataclass
 class SensorData:
@@ -30,44 +38,91 @@ class SensorData:
 
 known_sensors = {}
 
-def on_message(client, userdata, msg):
-    try:
-        p = json.loads(msg.payload.decode())
-        meta = p['metadata']
-        s = SensorData(
-            id=meta['device_id'],
-            location=LocationData(**meta['location']),
-            temperature=p['temperature'],
-            air_humidity=p['air_humidity'],
-            soil_humidity=p['soil_humidity'],
-            wind_speed=p['wind_speed'],
-            wind_direction=p['wind_direction']
-        )
-        known_sensors[s.id] = s
-    except: pass
+def consume_redpanda():
+    max_retries = 5
+    retry_count = 0
 
-client = mqtt.Client()
-client.on_message = on_message
-client.connect(MQTT_BROKER, 1883, 60)
-client.subscribe(TOPIC_SUBSCRIBE)
-client.loop_start()
+    while retry_count < max_retries:
+        try:
+            print(f"Tentative de connexion à Redpanda ({retry_count + 1}/{max_retries})...")
+            consumer = KafkaConsumer(
+                bootstrap_servers=[REDPANDA_BROKER],
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                auto_offset_reset='latest',
+                group_id='propagation-group'
+            )
+            pattern = re.compile(r'sensors\.meteo\..*\.data')
+            consumer.subscribe(pattern=pattern)
+            print("✓ Connecté à Redpanda")
+            print("Écoute des topics: sensors.meteo.*.data")
+            retry_count = 0
+
+            for message in consumer:
+                try:
+                    p = message.value
+                    meta = p['metadata']
+                    timestamp = message.timestamp
+                    dt = datetime.datetime.fromtimestamp(timestamp / 1000)
+                    s = SensorData(
+                        id=meta['device_id'],
+                        location=LocationData(**meta['location']),
+                        temperature=p['temperature'],
+                        air_humidity=p['air_humidity'],
+                        soil_humidity=p['soil_humidity'],
+                        wind_speed=p['wind_speed'],
+                        wind_direction=p['wind_direction']
+                    )
+                    known_sensors[s.id] = s
+                    print(f"[{dt.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}] {s}")
+                    print("")
+                except Exception as e:
+                    print(f"Erreur parsing: {e}")
+        except KafkaError as e:
+            retry_count += 1
+            print(f"✗ Erreur Kafka: {e}")
+            if retry_count < max_retries:
+                wait_time = 2 ** retry_count
+                print(f"Reconnexion dans {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                print("Max retries atteint. Arrêt de la consommation.")
+                break
+
+# Démarrer la consommation Redpanda dans un thread
+consumer_thread = threading.Thread(target=consume_redpanda, daemon=True)
+consumer_thread.start()
 
 class FirePredictor:
     def __init__(self, size=50):
         self.size = size
-        self.min_lat, self.max_lat = 43.5, 43.6
-        self.min_lon, self.max_lon = 7.0, 7.1
+        self.min_lat, self.max_lat = None, None
+        self.min_lon, self.max_lon = None, None
 
         self.weather_data = {}
         self.initialized = False
 
         self.seed_grid = np.zeros((size, size))
-
         self.display_grid = np.zeros((size, size))
 
     def update_weather_from_sensors(self, sensors_dict):
         if len(sensors_dict) < 3: return
         sensors = list(sensors_dict.values())
+
+        # Calculer dynamiquement les limites
+        lats = [s.location.latitude for s in sensors]
+        lons = [s.location.longitude for s in sensors]
+
+        self.min_lat, self.max_lat = min(lats), max(lats)
+        self.min_lon, self.max_lon = min(lons), max(lons)
+
+        # Ajouter une marge de 10%
+        lat_margin = (self.max_lat - self.min_lat) * 0.1
+        lon_margin = (self.max_lon - self.min_lon) * 0.1
+        self.min_lat -= lat_margin
+        self.max_lat += lat_margin
+        self.min_lon -= lon_margin
+        self.max_lon += lon_margin
+
         points = np.array([[s.location.longitude, s.location.latitude] for s in sensors])
 
         grid_x, grid_y = np.meshgrid(
@@ -158,25 +213,21 @@ def update(frame):
     predictor.update_weather_from_sensors(known_sensors)
 
     if not predictor.initialized:
-        titre.set_text("Attente données MQTT...")
+        titre.set_text(f"Attente données Redpanda... ({len(known_sensors)} capteurs)")
         return [matrice]
-    predictor.calculate_prediction(steps=PREDICTION_STEPS)
 
+    predictor.calculate_prediction(steps=PREDICTION_STEPS)
     matrice.set_data(predictor.display_grid)
 
     coords = predictor.get_sensor_coords()
     if coords:
         sx, sy = zip(*coords)
         points.set_offsets(list(zip(sx, sy)))
-
-    sensor_temps = [s.temperature for s in known_sensors.values()]
-    max_t = max(sensor_temps) if sensor_temps else 0
-    titre.set_text(f"(+{PREDICTION_STEPS} steps)")
+        titre.set_text(f"Feu prédis | {len(known_sensors)} capteurs | (+{PREDICTION_STEPS} steps)")
+    else:
+        titre.set_text("Pas de capteurs valides")
 
     return [matrice, points, titre]
 
-ani = animation.FuncAnimation(fig, update, frames=100, interval=200, blit=False)
+ani = animation.FuncAnimation(fig, update, frames=100, interval=500, blit=False)
 plt.show()
-
-client.loop_stop()
-client.disconnect()
