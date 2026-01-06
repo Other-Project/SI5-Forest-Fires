@@ -1,0 +1,44 @@
+services:
+  geojson-producer:
+    build:
+      context: ./src/cloud/geojson_producer
+      dockerfile: Dockerfile
+    networks:
+      - forest-fire-network
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+    depends_on:
+      - redpanda
+      - minio
+    restart: unless-stopped
+  
+  api:
+    build:
+      context: ./src/cloud/api
+      dockerfile: Dockerfile
+    ports:
+      - "8889:8081"
+    networks:
+      - forest-fire-network
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+    depends_on:
+      - redpanda
+      - minio
+    restart: unless-stopped
+
+  webui:
+    build:
+      context: ./src/cloud/webui
+      dockerfile: Dockerfile
+    ports:
+      - "8888:80"
+    networks:
+      - forest-fire-network
+    restart: unless-stopped

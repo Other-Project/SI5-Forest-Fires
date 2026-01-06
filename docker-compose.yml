@@ -1,3 +1,5 @@
+include:
+  - docker-compose.cloud.yml 
 services:
   # MQTT Broker - Entry point for edge device data
   mqtt-broker:
@@ -179,16 +181,6 @@ services:
     depends_on:
       - redpanda
       - minio
-    restart: unless-stopped
-
-  webui:
-    build:
-      context: ./src/cloud/webui
-      dockerfile: Dockerfile
-    ports:
-      - "8888:80"
-    networks:
-      - forest-fire-network
     restart: unless-stopped
 
 networks:
