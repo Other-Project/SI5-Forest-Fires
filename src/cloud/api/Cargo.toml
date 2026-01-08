@@ -6,4 +6,18 @@ edition = "2024"
 [dependencies]
 actix-web = "4"
 geojson = "0.24.2"
+
+# Args
+clap = { version = "4.5.53", features = ["env"] }
+
+# Logs
+log = "0.4.29"
+env_logger = "0.11.8"
+strfmt = "0.2.5"
+
+# Async Runtime
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
+futures = "0.3"
+
+# Kafka Client
 rdkafka = { version = "0.38", features = ["tokio", "cmake-build"] }

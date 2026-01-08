@@ -43,7 +43,7 @@ async fn main() {
                 .long("input-topic")
                 .env("KAFKA_INPUT_TOPIC")
                 .help("Input topic")
-                .default_value("^maps\\.watch$"),
+                .default_value("maps.watch"),
         )
         .arg(
             Arg::new("output-topic")
