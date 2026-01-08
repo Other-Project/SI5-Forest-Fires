@@ -15,6 +15,7 @@ fn gen_forest_area(area: f64) -> Feature {
         properties: Some(
             [
                 ("status".to_string(), JsonValue::Number(serde_json::Number::from(0))),
+                ("risk".to_string(), JsonValue::Number(serde_json::Number::from(0))),
             ]
             .iter().cloned().collect(),
         ),

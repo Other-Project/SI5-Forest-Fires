@@ -5,10 +5,10 @@ use log::info;
 
 mod process;
 mod logger;
-mod minio_worker;
+mod redpanda_worker;
 
 use crate::logger::setup_logger;
-use crate::minio_worker::run_async_processor;
+use crate::redpanda_worker::run_async_processor;
 
 #[tokio::main]
 async fn main() {
