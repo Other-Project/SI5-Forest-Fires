@@ -7,6 +7,7 @@ use minio::s3::MinioClient;
 use minio::s3::builders::ObjectContent;
 use minio::s3::creds::StaticProvider;
 use minio::s3::http::BaseUrl;
+use minio::s3::types::S3Api;
 use rdkafka::Message;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::Consumer;
@@ -43,6 +44,18 @@ async fn upload_to_minio(
     bucket: String,
     json_payload: String,
 ) -> Result<(), minio::s3::error::Error> {
+    let exists = minio_client
+        .bucket_exists(&bucket)
+        .build()
+        .send()
+        .await?
+        .exists();
+    if !exists  {
+        info!("Bucket {} does not exist. Creating...", bucket);
+        minio_client.create_bucket(&bucket).build().send().await?;
+        info!("Bucket {} created.", bucket);
+    }
+
     let object_name = format!(
         "map_watch_{}.json",
         chrono::Utc::now().format("%Y%m%dT%H%M%SZ")

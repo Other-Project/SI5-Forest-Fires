@@ -43,14 +43,14 @@ async fn main() {
                 .long("input-topic")
                 .env("KAFKA_INPUT_TOPIC")
                 .help("Input topic")
-                .default_value("^maps\\..*\\..*$"),
+                .default_value("^maps\\.watch$"),
         )
         .arg(
             Arg::new("output-topic")
                 .long("output-topic")
                 .env("KAFKA_OUTPUT_TOPIC")
                 .help("Output topic")
-                .default_value("maps\\.watch\\.geojson"),
+                .default_value("maps.watch.geojson"),
         )
         .arg(
             Arg::new("num-workers")
