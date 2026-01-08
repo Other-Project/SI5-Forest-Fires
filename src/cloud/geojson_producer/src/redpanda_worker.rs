@@ -4,27 +4,24 @@ use futures::StreamExt;
 use log::{error, info, warn};
 
 use minio::s3::MinioClient;
+use minio::s3::builders::ObjectContent;
 use minio::s3::creds::StaticProvider;
 use minio::s3::http::BaseUrl;
-use minio::s3::types::S3Api;
 use rdkafka::Message;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
-use rdkafka::error::{RDKafkaErrorCode};
+use rdkafka::error::RDKafkaErrorCode;
 use rdkafka::message::OwnedMessage;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 
 use strfmt::strfmt;
 
+use crate::map_message;
 use crate::process::gen_geojson;
 
 // Process weather data message
-async fn process_message(
-    msg: OwnedMessage,
-    minio_client: &MinioClient,
-    minio_bucket: &str,
-) -> Result<String, String> {
+async fn process_message(msg: OwnedMessage) -> Result<String, String> {
     info!("Processing message at offset {}", msg.offset());
 
     // Extract payload as byte array
@@ -33,10 +30,31 @@ async fn process_message(
         .ok_or_else(|| "No payload in message".to_string())?;
 
     // Process
+    let map_message: map_message::MapMessage = serde_json::from_slice(payload)
+        .map_err(|e| format!("Failed to deserialize MapMessage: {}", e))?;
 
     // Serialize to JSON for publishing
-    let json = gen_geojson();
+    let json = gen_geojson(map_message);
     Ok(json)
+}
+
+async fn upload_to_minio(
+    minio_client: std::sync::Arc<MinioClient>,
+    bucket: String,
+    json_payload: String,
+) -> Result<(), minio::s3::error::Error> {
+    let object_name = format!(
+        "map_watch_{}.json",
+        chrono::Utc::now().format("%Y%m%dT%H%M%SZ")
+    );
+
+    let content = ObjectContent::from(json_payload.as_bytes().to_vec());
+    minio_client
+        .put_object_content(bucket, object_name, content)
+        .build()
+        .send()
+        .await
+        .map(|_| ())
 }
 
 pub async fn run_async_processor(
@@ -94,12 +112,22 @@ pub async fn run_async_processor(
                 let owned_message = borrowed_message.detach();
 
                 tokio::spawn(async move {
-                    let process_handle = tokio::spawn(async move {
-                        process_message(owned_message, &*minio_client, &minio_bucket).await
-                    });
+                    let process_handle =
+                        tokio::spawn(async move { process_message(owned_message).await });
 
                     match process_handle.await {
                         Ok(Ok(json_payload)) => {
+                            info!(
+                                "Uploading GeoJSON payload to MinIO bucket: {}",
+                                minio_bucket
+                            );
+                            match upload_to_minio(minio_client, minio_bucket, json_payload.clone())
+                                .await
+                            {
+                                Ok(_) => info!("Successfully uploaded GeoJSON to MinIO"),
+                                Err(e) => error!("Failed to upload to MinIO: {}", e),
+                            };
+
                             let vars: std::collections::HashMap<String, String> =
                                 std::collections::HashMap::new();
 

@@ -6,6 +6,7 @@ use log::info;
 mod process;
 mod logger;
 mod redpanda_worker;
+mod map_message;
 
 use crate::logger::setup_logger;
 use crate::redpanda_worker::run_async_processor;

@@ -1,31 +1,50 @@
 use geojson::{Feature, FeatureCollection, GeoJson, Value, feature::Id};
 use serde_json::value::Value as JsonValue;
 
-fn gen_forest_area(area: f64) -> Feature {
+use crate::map_message;
+
+fn gen_forest_area(cell: &map_message::MapCell, cell_size_lat: f64, cell_size_lon: f64) -> Feature {
     Feature {
         bbox: None,
-        geometry: Some(Value::Polygon(vec![vec![
-            vec![0.0 + area, 0.0 + area],
-            vec![1.0 + area, 0.0 + area],
-            vec![1.0 + area, 1.0 + area],
-            vec![0.0 + area, 1.0 + area],
-            vec![0.0 + area, 0.0 + area],
-        ]]).into()),
-        id: Some(Id::String(format!("forest_area_{}", area))),
+        geometry: Some(
+            Value::Polygon(vec![vec![
+                vec![cell.longitude, cell.latitude],
+                vec![cell.longitude + cell_size_lon, cell.latitude],
+                vec![
+                    cell.longitude + cell_size_lon,
+                    cell.latitude + cell_size_lat,
+                ],
+                vec![cell.longitude, cell.latitude + cell_size_lat],
+                vec![cell.longitude, cell.latitude],
+            ]])
+            .into(),
+        ),
+        id: Some(Id::String(format!(
+            "forest_area_{}_{}",
+            cell.latitude, cell.longitude
+        ))),
         properties: Some(
             [
-                ("status".to_string(), JsonValue::Number(serde_json::Number::from(0))),
-                ("risk".to_string(), JsonValue::Number(serde_json::Number::from(0))),
+                (
+                    "status".to_string(),
+                    JsonValue::Number(serde_json::Number::from_f64(cell.value).unwrap()),
+                ),
+                //("risk".to_string(), JsonValue::Number(serde_json::Number::from_f64(cell.value).unwrap())),
             ]
-            .iter().cloned().collect(),
+            .iter()
+            .cloned()
+            .collect(),
         ),
         foreign_members: None,
     }
 }
 
-pub fn gen_geojson() -> String {
-    let feature_collection: FeatureCollection =
-        (0..10).map(|area| gen_forest_area(area as f64)).collect();
+pub fn gen_geojson(map_message: map_message::MapMessage) -> String {
+    let feature_collection: FeatureCollection = map_message
+        .cells
+        .iter()
+        .map(|cell| gen_forest_area(cell, map_message.cell_size_lat, map_message.cell_size_lon))
+        .collect();
 
     GeoJson::from(feature_collection).to_string()
 }

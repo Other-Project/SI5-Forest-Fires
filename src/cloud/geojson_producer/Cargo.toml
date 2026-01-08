@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-geojson = "0.24.2"
-serde_json = "1.0.148"
-
 # Args
 clap = { version = "4.5.53", features = ["env"] }
 
@@ -24,3 +21,10 @@ rdkafka = { version = "0.38", features = ["tokio", "cmake-build"] }
 
 # MinIO Client (Official minio-rs)
 minio = { git = "https://github.com/minio/minio-rs.git" }
+
+# Serialization
+geojson = "0.24.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+nom = "8.0.0"
+chrono = "0.4.42"
