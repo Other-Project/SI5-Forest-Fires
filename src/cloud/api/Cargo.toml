@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 actix-web = "4"
 geojson = "0.24.2"
+rdkafka = { version = "0.38", features = ["tokio", "cmake-build"] }
