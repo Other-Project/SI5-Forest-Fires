@@ -1,9 +1,8 @@
 use actix_web::{App, HttpResponse, HttpServer, Responder, get};
 use clap::{Arg, Command};
 use log::info;
+use rust_shared::logger;
 
-mod logger;
-mod redpanda_utils;
 mod redpanda_watcher;
 
 #[get("/watch")]

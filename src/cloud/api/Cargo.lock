@@ -276,6 +276,7 @@ dependencies = [
  "geojson",
  "log",
  "rdkafka",
+ "rust_shared",
  "strfmt",
  "tokio",
 ]
@@ -1503,6 +1504,18 @@ dependencies = [
  "num-traits",
  "serde",
  "smallvec",
+]
+
+[[package]]
+name = "rust_shared"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "futures",
+ "log",
+ "rdkafka",
+ "strfmt",
+ "tokio",
 ]
 
 [[package]]

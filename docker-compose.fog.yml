@@ -3,6 +3,8 @@ services:
     build:
       context: ./src/fog/pre-treatment
       dockerfile: Dockerfile
+      additional_contexts:
+        shared: ./src/utils/rust_shared
     networks:
       - forest-fire-network
     environment:

@@ -2,6 +2,10 @@
     "rust-analyzer.linkedProjects": [
         "src/fog/pre-treatment/Cargo.toml",
         "src/cloud/geojson_producer/Cargo.toml",
-        "src/cloud/api/Cargo.toml"
+        "src/cloud/api/Cargo.toml",
+        "src/utils/rust_shared/Cargo.toml"
+    ],
+    "cSpell.words": [
+        "redpanda"
     ]
 }

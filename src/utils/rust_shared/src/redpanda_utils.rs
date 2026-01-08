@@ -18,6 +18,14 @@ pub fn setup_redpanda_consumer(brokers: String, group_id: String) -> StreamConsu
         .expect("Consumer creation failed")
 }
 
+pub fn setup_redpanda_producer(brokers: String) -> rdkafka::producer::FutureProducer {
+    ClientConfig::new()
+        .set("bootstrap.servers", &brokers)
+        .set("message.timeout.ms", "5000")
+        .create()
+        .expect("Producer creation error")
+}
+
 pub async fn subscribe_to_topic<F, Fut>(consumer: &StreamConsumer, topic: String, handler: F)
 where
     F: Fn(rdkafka::message::OwnedMessage) -> Fut + Send + Sync + 'static,
@@ -26,6 +34,11 @@ where
     consumer
         .subscribe(&[&topic])
         .expect("Can't subscribe to specified topic");
+
+    info!(
+        "Starting event loop, waiting for messages in topics matching: {}",
+        topic
+    );
 
     let mut stream = consumer.stream();
     while let Some(message_result) = stream.next().await {

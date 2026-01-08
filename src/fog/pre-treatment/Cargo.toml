@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+rust_shared = { path = "../../utils/rust_shared" }
+
 # Kafka Client
 rdkafka = { version = "0.38", features = ["tokio", "cmake-build"] }
 

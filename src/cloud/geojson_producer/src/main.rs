@@ -4,11 +4,10 @@ use futures::StreamExt;
 use log::info;
 
 mod process;
-mod logger;
 mod redpanda_worker;
 mod map_message;
 
-use crate::logger::setup_logger;
+use rust_shared::logger;
 use crate::redpanda_worker::run_async_processor;
 
 #[tokio::main]
@@ -90,7 +89,7 @@ async fn main() {
         )
         .get_matches();
 
-    setup_logger(true, matches.get_one("log-conf"));
+    logger::setup_logger(true, matches.get_one("log-conf"));
 
     let brokers = matches.get_one::<String>("brokers").unwrap();
     let group_id = matches.get_one::<String>("group-id").unwrap();
