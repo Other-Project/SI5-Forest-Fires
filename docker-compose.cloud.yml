@@ -24,7 +24,7 @@ services:
       additional_contexts:
         shared: ./src/utils/rust_shared
     ports:
-      - "8889:8081"
+      - "8889:8889"
     networks:
       - forest-fire-network
     environment:

@@ -53,6 +53,10 @@ where
                 Some(RDKafkaErrorCode::UnknownTopicOrPartition) => {
                     warn!("Topic matching regex not found yet. Waiting...");
                 }
+                Some(RDKafkaErrorCode::BrokerTransportFailure) => {
+                    error!("Waiting 5 seconds due to broker transport failure: {:?}", e);
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                }
                 _ => {
                     error!("Error receiving message: {:?}", e);
                 }

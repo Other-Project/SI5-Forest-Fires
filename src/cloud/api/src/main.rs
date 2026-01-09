@@ -7,7 +7,7 @@ mod redpanda_watcher;
 
 #[get("/watch")]
 async fn watch() -> impl Responder {
-    let serialized: String = redpanda_watcher::get_geojson().to_string();
+    let serialized: String = redpanda_watcher::get_geojson().await.to_string();
     HttpResponse::Ok()
         .content_type("application/geo+json")
         .body(serialized)
@@ -57,10 +57,10 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting API server...");
 
-    redpanda_watcher::init(brokers.clone(), group_id.clone(), input_topic.clone()).await;
+    tokio::spawn(redpanda_watcher::init(brokers.clone(), group_id.clone(), input_topic.clone()));
 
     HttpServer::new(|| App::new().service(watch))
-        .bind(("127.0.0.1", 8081))?
+        .bind(("127.0.0.1", 8889))?
         .run()
         .await
 }

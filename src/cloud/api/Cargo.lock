@@ -275,8 +275,11 @@ dependencies = [
  "futures",
  "geojson",
  "log",
+ "once_cell",
  "rdkafka",
  "rust_shared",
+ "serde",
+ "serde_json",
  "strfmt",
  "tokio",
 ]
