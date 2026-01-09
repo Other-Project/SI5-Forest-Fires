@@ -1,5 +1,5 @@
 // src/App.tsx
-import { type Component, createSignal } from 'solid-js';
+import { type Component, createSignal, onCleanup, onMount } from 'solid-js';
 import './App.css'
 import Header from './components/Header';
 import InfoPanel from './components/InfoPanel';
@@ -10,154 +10,52 @@ import type { FeatureCollection } from 'geojson';
 const App: Component = () => {
   const [viewMode, setViewMode] = createSignal<ViewMode>('risk');
 
-  // Sample data
-  const forestAreas: FeatureCollection = {
-    "type": "FeatureCollection",
-    "features": [
-      {
-        "type": "Feature",
-        "properties": {
-          "risk": 30
-        },
-        "geometry": {
-          "coordinates": [
-            [
-              [
-                5.5,
-                43.5
-              ],
-              [
-                5.55,
-                43.5
-              ],
-              [
-                5.55,
-                43.55
-              ],
-              [
-                5.5,
-                43.55
-              ],
-              [
-                5.5,
-                43.5
-              ]
-            ]
-          ],
-          "type": "Polygon"
-        }
-      },
-      {
-        "type": "Feature",
-        "properties": {
-          "risk": 75
-        },
-        "geometry": {
-          "coordinates": [
-            [
-              [
-                5.55,
-                43.55
-              ],
-              [
-                5.6,
-                43.55
-              ],
-              [
-                5.6,
-                43.6
-              ],
-              [
-                5.55,
-                43.6
-              ],
-              [
-                5.55,
-                43.55
-              ]
-            ]
-          ],
-          "type": "Polygon"
-        }
-      },
-      {
-        "type": "Feature",
-        "properties": {
-          "risk": 100
-        },
-        "geometry": {
-          "coordinates": [
-            [
-              [
-                5.55,
-                43.55
-              ],
-              [
-                5.55,
-                43.5
-              ],
-              [
-                5.6,
-                43.5
-              ],
-              [
-                5.6,
-                43.55
-              ],
-              [
-                5.55,
-                43.55
-              ]
-            ]
-          ],
-          "type": "Polygon"
-        }
-      },
-      {
-        "type": "Feature",
-        "properties": {
-          "risk": 10
-        },
-        "geometry": {
-          "coordinates": [
-            [
-              [
-                5.55,
-                43.55
-              ],
-              [
-                5.55,
-                43.6
-              ],
-              [
-                5.5,
-                43.6
-              ],
-              [
-                5.5,
-                43.55
-              ],
-              [
-                5.55,
-                43.55
-              ]
-            ]
-          ],
-          "type": "Polygon"
-        }
+  // Data state
+  const [forestAreas, setForestAreas] = createSignal<FeatureCollection>({ type: "FeatureCollection", features: [] });
+  const [windData, setWindData] = createSignal<WindData>({ speed: 0, direction: 0 });
+
+  // Fetch initial data and subscribe to updates
+  onMount(() => {
+    let ws: WebSocket | null = null;
+
+    // Fetch initial data
+    fetch('/api/watch')
+      .then(res => res.json())
+      .then(data => {
+        setForestAreas(data);
+        setWindData({ speed: 0, direction: 0 });
+        //if (data.wind) setWindData(data.wind);
+      });
+
+    // Subscribe to updates
+    ws = new WebSocket(`ws://${window.location.host}/api/ws`);
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setForestAreas(data);
+        //if (data.wind) setWindData(data.wind);
+      } catch (e) {
+        // Ignore malformed messages
       }
-    ]
-  };
-  const windData: WindData = { speed: 15, direction: 45 };
+    };
+
+    onCleanup(() => {
+      ws?.close();
+    });
+  });
 
   const handleViewChange = (mode: ViewMode) => setViewMode(mode);
 
   return (
     <div class="dashboard">
       <Header viewMode={viewMode} onChange={handleViewChange} />
-      <MapContainer viewMode={viewMode} areas={forestAreas} windData={windData}>
+      <MapContainer
+        viewMode={viewMode}
+        areas={forestAreas()}
+        windData={windData()}
+      >
         <InfoPanel viewMode={viewMode} />
-        {/*<WindIndicator direction={windData.direction} speed={windData.speed} />*/}
+        {/*<WindIndicator direction={windData().direction} speed={windData().speed} />*/}
       </MapContainer>
     </div>
   );
