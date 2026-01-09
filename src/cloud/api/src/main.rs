@@ -1,5 +1,7 @@
-use actix_web::{App, HttpResponse, HttpServer, Responder, get};
+use actix_web::{App, Error, HttpRequest, HttpResponse, HttpServer, Responder, get, rt, web};
+use actix_ws::AggregatedMessage;
 use clap::{Arg, Command};
+use futures::StreamExt;
 use log::info;
 use rust_shared::logger;
 
@@ -7,10 +9,53 @@ mod redpanda_watcher;
 
 #[get("/watch")]
 async fn watch() -> impl Responder {
+    info!("Received request for GeoJSON data");
     let serialized: String = redpanda_watcher::get_geojson().await.to_string();
+    info!("Returning GeoJSON data: {}", serialized);
     HttpResponse::Ok()
         .content_type("application/geo+json")
         .body(serialized)
+}
+
+#[get("/ws")]
+async fn echo(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
+    let (res, mut session, ws_stream) = actix_ws::handle(&req, stream)?;
+    let mut geojson_notifications = redpanda_watcher::subscribe_geojson_notifications();
+
+    // Task to send GeoJSON data on notification
+    rt::spawn({
+        let mut session = session.clone();
+        async move {
+            loop {
+                match geojson_notifications.recv().await {
+                    Ok(_) => {
+                        let geojson = redpanda_watcher::get_geojson().await.to_string();
+                        match session.text(geojson).await {
+                            Ok(()) => log::info!("Sent updated GeoJSON data over websocket"),
+                            Err(e) => log::error!("Failed to send GeoJSON data: {}", e),
+                        };
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                }
+            }
+        }
+    });
+
+    // Task to handle incoming websocket messages
+    rt::spawn(async move {
+        let mut ws_stream = ws_stream
+            .aggregate_continuations()
+            .max_continuation_size(2_usize.pow(20));
+        while let Some(msg) = ws_stream.next().await {
+            match msg {
+                Ok(AggregatedMessage::Ping(msg)) => session.pong(&msg).await.unwrap(),
+                _ => {}
+            }
+        }
+    });
+
+    Ok(res)
 }
 
 #[actix_web::main]
@@ -57,10 +102,14 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting API server...");
 
-    tokio::spawn(redpanda_watcher::init(brokers.clone(), group_id.clone(), input_topic.clone()));
+    tokio::spawn(redpanda_watcher::init(
+        brokers.clone(),
+        group_id.clone(),
+        input_topic.clone(),
+    ));
 
-    HttpServer::new(|| App::new().service(watch))
-        .bind(("127.0.0.1", 8889))?
+    HttpServer::new(|| App::new().service(watch).service(echo))
+        .bind(("0.0.0.0", 8889))?
         .run()
         .await
 }

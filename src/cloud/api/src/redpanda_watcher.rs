@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use rdkafka::Message;
 use rust_shared::redpanda_utils;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
 
 static GEOJSON_DATA: Lazy<Arc<RwLock<GeoJson>>> = Lazy::new(|| {
     Arc::new(RwLock::new(GeoJson::from(FeatureCollection {
@@ -13,6 +13,18 @@ static GEOJSON_DATA: Lazy<Arc<RwLock<GeoJson>>> = Lazy::new(|| {
         foreign_members: None,
     })))
 });
+
+// Broadcast channel for notifications
+static GEOJSON_NOTIFY: Lazy<broadcast::Sender<()>> = Lazy::new(|| {
+    let (tx, _rx) = broadcast::channel(16);
+    tx
+});
+
+/// Subscribe to notifications for new GeoJSON data.
+/// Returns a broadcast receiver that receives a unit value whenever new data arrives.
+pub fn subscribe_geojson_notifications() -> broadcast::Receiver<()> {
+    GEOJSON_NOTIFY.subscribe()
+}
 
 pub async fn get_geojson() -> GeoJson {
     GEOJSON_DATA.read().await.clone()
@@ -41,6 +53,9 @@ pub async fn init(brokers: String, group_id: String, input_topic: String) {
 
             let mut data = geojson_data.write().await;
             *data = geojson;
+
+            // Notify listeners of new data
+            let _ = GEOJSON_NOTIFY.send(());
         }
     })
     .await;
