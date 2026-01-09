@@ -51,7 +51,7 @@ const App: Component = () => {
       <Header viewMode={viewMode} onChange={handleViewChange} />
       <MapContainer
         viewMode={viewMode}
-        areas={forestAreas()}
+        areas={forestAreas}
         windData={windData()}
       >
         <InfoPanel viewMode={viewMode} />

@@ -13,7 +13,7 @@ const DEM_TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z
 type MapContainerProps = {
     viewMode: () => ViewMode;
     windData: WindData;
-    areas?: FeatureCollection;
+    areas: () => FeatureCollection;
     children?: JSXElement;
 };
 
@@ -127,7 +127,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
 
             mapInstance.addSource('risk-areas', {
                 type: 'geojson',
-                data: props.areas ?? { type: 'FeatureCollection', features: [] }
+                data: props.areas()
             });
 
             // Filled polygons colored by 'risk' feature property.
@@ -209,7 +209,14 @@ const MapContainer: Component<MapContainerProps> = (props) => {
         if (!m) return;
 
         const src = m.getSource('risk-areas') as maplibregl.GeoJSONSource | undefined;
-        src?.setData(props.areas ?? { type: 'FeatureCollection', features: [] });
+        src?.setData(props.areas());
+
+        // Force a repaint to ensure MapLibre redraws the updated GeoJSON
+        m.triggerRepaint?.();
+
+        // Also refresh deck.gl overlay props to provoke any overlay-driven redraws
+        const ov = overlay();
+        if (ov) ov.setProps({ layers: createLayers() });
 
         // toggle visibility depending on view mode
         const visibility = props.viewMode() === 'risk' ? 'visible' : 'none';
