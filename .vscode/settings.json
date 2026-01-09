@@ -5,6 +5,10 @@
         "src/cloud/api/Cargo.toml",
         "src/utils/rust_shared/Cargo.toml"
     ],
+    "python.analysis.extraPaths": [
+        "src/edge/simulation/.venv/lib/python3.12/site-packages",
+        "src/fog/propagation/.venv/lib/python3.12/site-packages"
+    ],
     "cSpell.words": [
         "actix",
         "redpanda"
