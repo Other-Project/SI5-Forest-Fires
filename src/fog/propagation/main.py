@@ -218,13 +218,13 @@ class FirePredictor:
         if not cells_data: return
 
         payload = {
-            "timestamp": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "cell_size_lat": round(lat_step, 6),
             "cell_size_lon": round(lon_step, 6),
             "cells": cells_data
         }
 
-        topic = f"alerts.risk.maps.risk.{primary_area}"
+        topic = "maps.watch"
 
         try:
             producer.send(topic, value=payload)
