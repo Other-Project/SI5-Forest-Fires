@@ -46,3 +46,16 @@ services:
     networks:
       - forest-fire-network
     restart: unless-stopped
+
+  proxy:
+    image: nginx:latest
+    volumes:
+      - ./configs/nginx/:/etc/nginx/conf.d/:Z
+    ports:
+      - "80:80"
+    networks:
+      - forest-fire-network
+    depends_on:
+      - webui
+      - api
+    restart: unless-stopped

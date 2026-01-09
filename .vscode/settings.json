@@ -6,6 +6,7 @@
         "src/utils/rust_shared/Cargo.toml"
     ],
     "cSpell.words": [
+        "actix",
         "redpanda"
     ]
 }
