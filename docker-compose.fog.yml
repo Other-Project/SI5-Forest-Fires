@@ -140,24 +140,6 @@ services:
       - forest-fire-network
     restart: unless-stopped
 
-  # Chronograf - InfluxDB Management UI
-  chronograf:
-    image: chronograf:latest
-    container_name: chronograf
-    ports:
-      - "8089:8888"
-    environment:
-      INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_USERNAME: admin
-      INFLUXDB_PASSWORD: adminpass123
-    volumes:
-      - chronograf-data:/var/lib/chronograf
-    networks:
-      - forest-fire-network
-    depends_on:
-      - influxdb
-    restart: unless-stopped
-
   redpanda-connect:
     image: docker.redpanda.com/redpandadata/connect:latest
     container_name: redpanda_connect
@@ -181,5 +163,4 @@ volumes:
   minio-data:
   influxdb-data:
   influxdb-config:
-  chronograf-data:
   connect-data:
