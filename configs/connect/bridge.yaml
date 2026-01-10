@@ -2,29 +2,39 @@ input:
   redpanda:
     seed_brokers: ["redpanda:9092"]
     consumer_group: "influxdb_bridge_group"
+    topics: ["^sensors\\..*\\..*\\.data$"]
     regexp_topics: true
-    topics:
-      - "^sensors\\..*\\..*\\.raw$"
 
 pipeline:
   processors:
     - mapping: |
-        # 1. Variables de base
+        # Décodage du JSON depuis le contenu brut
+        let doc = content().parse_json().catch({})
+
+        # Récupération des tags (location=meteo, sensor_id=3)
         let parts = meta("kafka_topic").split(".")
-        let loc = $parts.index(1)
-        let sid = $parts.index(2)
+        let loc_tag = $parts.index(1).catch("unknown")
+        let sid_tag = $parts.index(2).catch("unknown")
+
+        # Extraction des champs avec des valeurs par défaut de secours
+        let dev_id = $doc.device_id | 0
+        let lat = $doc.location.latitude | 0.0
+        let lon = $doc.location.longitude | 0.0
+        let alt = $doc.location.altitude | 0.0
+        let forest = $doc.forest_area | "unknown"
+
+        # création de la ligne pour InfluxDB
+        # %v pour les nombres, %s pour les chaînes
+        let fields = "device_id=%v,lat=%v,lon=%v,alt=%v,forest=\"%s\"".format($dev_id, $lat, $lon, $alt, $forest)
         
-        # 2. On aplatit le JSON
-        let flat = this.flatten()
-        
-        # 3. Construction des champs
-        let fields = $flat.map_each(item -> match {
-            item.value.type() == "string" => "%s=\"%s\"".format(item.key, item.value),
-            _ => "%s=%s".format(item.key, item.value.string())
-        }).values().join(",")
-        
-        # 4. Construction finale
-        root = "sensor_data,location=%s,sensor_id=%s %s".format($loc, $sid, $fields)
+        root = "sensor_data,location=%s,sensor_id=%s %s".format($loc_tag, $sid_tag, $fields)
 
 output:
-  stdout: {}
+  http_client:
+    url: "http://influxdb:8086/api/v2/write?org=iot-org&bucket=sensor-data&precision=s"
+    verb: POST
+    headers:
+      Authorization: 'Token MaDGMvzcjKqf6wu3wvTTxnd0d2fogJVerE-hzw01WI8VbhR63AtNTUoQD9FV9YSyJ8_bVPMPNu8w_r1HF8pe-g=='
+      Content-Type: text/plain; charset=utf-8
+
+#Token Anthony MaDGMvzcjKqf6wu3wvTTxnd0d2fogJVerE-hzw01WI8VbhR63AtNTUoQD9FV9YSyJ8_bVPMPNu8w_r1HF8pe-g==
