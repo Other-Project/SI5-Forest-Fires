@@ -150,12 +150,12 @@ const MapContainer: Component<MapContainerProps> = (props) => {
                 source: 'areas',
                 paint: {
                     'fill-color': [
-                        'interpolate',
-                        ['linear'],
-                        ['coalesce', ['to-number', ['get', 'status']], 0],
-                        0, '#10b981',
+                        'match',
+                        ['to-number', ['get', 'status']],
+                        0, '#ef4444',
                         1, '#f97316',
-                        2, '#6b7280'
+                        2, '#6b7280',
+                        '#000000' // default
                     ],
                     'fill-opacity': 0.4,
                 }
