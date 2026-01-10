@@ -34,7 +34,5 @@ output:
     url: "http://influxdb:8086/api/v2/write?org=iot-org&bucket=sensor-data&precision=s"
     verb: POST
     headers:
-      Authorization: 'Token MaDGMvzcjKqf6wu3wvTTxnd0d2fogJVerE-hzw01WI8VbhR63AtNTUoQD9FV9YSyJ8_bVPMPNu8w_r1HF8pe-g=='
+      Authorization: 'Token my-super-secret-auth-token'
       Content-Type: text/plain; charset=utf-8
-
-#Token Anthony MaDGMvzcjKqf6wu3wvTTxnd0d2fogJVerE-hzw01WI8VbhR63AtNTUoQD9FV9YSyJ8_bVPMPNu8w_r1HF8pe-g==
