@@ -8,7 +8,7 @@ import type { ViewMode, WindData } from './types';
 import type { FeatureCollection } from 'geojson';
 
 const App: Component = () => {
-  const [viewMode, setViewMode] = createSignal<ViewMode>('risk');
+  const [viewMode, setViewMode] = createSignal<ViewMode>('surveillance');
 
   // Data state
   const [forestAreas, setForestAreas] = createSignal<FeatureCollection>({ type: "FeatureCollection", features: [] });

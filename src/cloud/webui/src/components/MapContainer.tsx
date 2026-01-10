@@ -87,6 +87,19 @@ const MapContainer: Component<MapContainerProps> = (props) => {
         return layers;
     };
 
+    const setLayerVisibility = () => {
+        const m = map();
+        if (!m) return;
+
+        const isRisk = props.viewMode() === 'risk' ? 'visible' : 'none';
+        if (m.getLayer('risk-areas-fill')) m.setLayoutProperty('risk-areas-fill', 'visibility', isRisk);
+        if (m.getLayer('risk-areas-outline')) m.setLayoutProperty('risk-areas-outline', 'visibility', isRisk);
+        if (m.getLayer('risk-areas-label')) m.setLayoutProperty('risk-areas-label', 'visibility', isRisk);
+
+        const isSurv = props.viewMode() === 'surveillance' ? 'visible' : 'none';
+        if (m.getLayer('surveillance-areas-fill')) m.setLayoutProperty('surveillance-areas-fill', 'visibility', isSurv);
+    }
+
     onMount(() => {
         const mapInstance = new maplibregl.Map({
             container: 'map',
@@ -125,16 +138,34 @@ const MapContainer: Component<MapContainerProps> = (props) => {
                 }
             });
 
-            mapInstance.addSource('risk-areas', {
+            mapInstance.addSource('areas', {
                 type: 'geojson',
                 data: props.areas()
+            });
+
+            // Filled polygons colored by 'status' feature property.
+            mapInstance.addLayer({
+                id: 'surveillance-areas-fill',
+                type: 'fill',
+                source: 'areas',
+                paint: {
+                    'fill-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['coalesce', ['to-number', ['get', 'status']], 0],
+                        0, '#10b981',
+                        1, '#f97316',
+                        2, '#6b7280'
+                    ],
+                    'fill-opacity': 0.4,
+                }
             });
 
             // Filled polygons colored by 'risk' feature property.
             mapInstance.addLayer({
                 id: 'risk-areas-fill',
                 type: 'fill',
-                source: 'risk-areas',
+                source: 'areas',
                 paint: {
                     'fill-color': [
                         'interpolate',
@@ -152,7 +183,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
             mapInstance.addLayer({
                 id: 'risk-areas-outline',
                 type: 'line',
-                source: 'risk-areas',
+                source: 'areas',
                 paint: {
                     'line-color': '#000000',
                     'line-opacity': 0.2,
@@ -165,7 +196,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
             mapInstance.addLayer({
                 id: 'risk-areas-label',
                 type: 'symbol',
-                source: 'risk-areas',
+                source: 'areas',
                 layout: {
                     'text-field': [
                         'concat',
@@ -188,11 +219,8 @@ const MapContainer: Component<MapContainerProps> = (props) => {
                 minzoom: 10
             });
 
-            // Initially hide the risk layers unless the viewMode is 'risk'
-            const initialVisibility = props.viewMode() === 'risk' ? 'visible' : 'none';
-            mapInstance.setLayoutProperty('risk-areas-fill', 'visibility', initialVisibility);
-            mapInstance.setLayoutProperty('risk-areas-outline', 'visibility', initialVisibility);
-            mapInstance.setLayoutProperty('risk-areas-label', 'visibility', initialVisibility);
+            // Set initial visibility based on view mode
+            setLayerVisibility();
 
             // Use MapboxOverlay so deck.gl layers are attached to the map and map drives the view
             const overlayInstance = new MapboxOverlay({
@@ -208,7 +236,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
         const m = map();
         if (!m) return;
 
-        const src = m.getSource('risk-areas') as maplibregl.GeoJSONSource | undefined;
+        const src = m.getSource('areas') as maplibregl.GeoJSONSource | undefined;
         src?.setData(props.areas());
 
         // Force a repaint to ensure MapLibre redraws the updated GeoJSON
@@ -219,10 +247,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
         if (ov) ov.setProps({ layers: createLayers() });
 
         // toggle visibility depending on view mode
-        const visibility = props.viewMode() === 'risk' ? 'visible' : 'none';
-        if (m.getLayer('risk-areas-fill')) m.setLayoutProperty('risk-areas-fill', 'visibility', visibility);
-        if (m.getLayer('risk-areas-outline')) m.setLayoutProperty('risk-areas-outline', 'visibility', visibility);
-        if (m.getLayer('risk-areas-label')) m.setLayoutProperty('risk-areas-label', 'visibility', visibility);
+        setLayerVisibility();
     });
 
     // update layers when mode changes
