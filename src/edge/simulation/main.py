@@ -56,7 +56,7 @@ def parse_geojson(file_path):
 
 def upload_station_to_minio(minio_client, station):
     try:
-        object_name=f"{station['device_id']}.json"
+        object_name = f"{station['device_id']}.json"
         data_bytes = json.dumps(station).encode("utf-8")
         minio_client.put_object(
             bucket_name=MINIO_BUCKET,
@@ -133,7 +133,9 @@ async def sim_loop(max_steps=None):
             payload = sim.payload_to_bytes(p)
             topic = f"sensors/meteo/{device_id}/raw"
             client.publish(topic, payload)
-            print(f"-> {device_id} | T:{float(p['temperature']):.2f}°C | Vent:{int(p['wind_direction'])}°")
+            print(
+                f"-> {device_id} | T:{float(p['temperature']):.2f}°C | Vent:{int(p['wind_direction'])}°"
+            )
 
         step_count += 1
         if max_steps is not None and step_count >= max_steps:
@@ -157,13 +159,13 @@ if PLOT:
     import matplotlib.animation as animation
 
     def update_gui(frame):
-        if frame == 40:
-            titre.set_text("Vent 315°")
-
         # Safely read fire grid snapshot for display
         with env_lock:
             grid = sim.env.fire_grid.copy()
         im_fire.set_data(grid)
+        titre.set_text(
+            f"Vent {sim.env.wind_speed_map.mean():.1f} km/h à {sim.env.wind_dir_map.mean():.1f}°"
+        )
         return [im_fire, titre]
 
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -172,7 +174,7 @@ if PLOT:
     sx = [s.x for s in sim.sensors]
     sy = [s.y for s in sim.sensors]
     ax.scatter(sx, sy, c="cyan", edgecolors="white", s=80)
-    titre = ax.set_title("Vent 135°")
+    titre = ax.set_title("")
 
     ani = animation.FuncAnimation(
         fig, update_gui, frames=200, interval=1000, blit=False
