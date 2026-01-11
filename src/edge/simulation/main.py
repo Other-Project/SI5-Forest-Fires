@@ -131,6 +131,7 @@ async def sim_loop(max_steps=None):
             payload = sim.payload_to_bytes(p)
             topic = f"sensors/meteo/{device_id}/raw"
             client.publish(topic, payload)
+            print(f"-> {device_id} | T:{float(p['temperature']):.2f}°C | Vent:{int(p['wind_direction'])}°")
 
         step_count += 1
         if max_steps is not None and step_count >= max_steps:

@@ -50,6 +50,8 @@ class SimulationEngine:
             s.read_wind_d = self.env.wind_dir_map[s.y, s.x]
 
     def payload_to_bytes(self, payload):
+        payload = self.payload_to_discrete(payload)
+
         # Define the mapping of fields to struct format specifiers
         field_mapping = [
             ("metadata.device_id", "H"),  # u16
@@ -90,19 +92,31 @@ class SimulationEngine:
                 "metadata": {
                     "device_id": s.id,
                     "timestamp": now.timestamp(),
-                    "battery_voltage": int(battery * 100),
+                    "battery_voltage": battery,
                     "statut_bits": 0,
                 },
-                "temperature": int((s.read_temp + 20.0) / 0.25),
-                "air_humidity": int(s.read_air_hum),
-                "soil_humidity": int(s.read_soil_hum),
-                "air_pressure": int(s.read_pressure / 0.1),
-                "rain": int(s.read_rain / 0.2),
-                "wind_speed": int(s.read_wind_s / 0.2),
-                "wind_direction": int(s.read_wind_d / 0.5),
+                "temperature": s.read_temp,
+                "air_humidity": s.read_air_hum,
+                "soil_humidity": s.read_soil_hum,
+                "air_pressure": s.read_pressure,
+                "rain": s.read_rain,
+                "wind_speed": s.read_wind_s,
+                "wind_direction": s.read_wind_d,
             }
             payloads.append(payload)
         return payloads
+    
+    def payload_to_discrete(self, payload):
+        payload = payload.copy()
+        payload["metadata"]["battery_voltage"] = int(payload["metadata"]["battery_voltage"] * 100)
+        payload["temperature"] = int((payload["temperature"] + 20.0) / 0.25)
+        payload["air_humidity"] = int(payload["air_humidity"])
+        payload["soil_humidity"] = int(payload["soil_humidity"])
+        payload["air_pressure"] = int(payload["air_pressure"] / 0.1)
+        payload["rain"] = int(payload["rain"] / 0.2)
+        payload["wind_speed"] = int(payload["wind_speed"] / 0.2)
+        payload["wind_direction"] = int(payload["wind_direction"] / 0.5)
+        return payload
 
     def step(self):
         self.env.evolve_wind()
