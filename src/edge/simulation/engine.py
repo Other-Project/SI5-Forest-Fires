@@ -4,6 +4,9 @@ import datetime
 import numpy as np
 import random
 import struct
+import scipy.ndimage
+from PIL import Image
+import io
 
 class SimulationEngine:
     def __init__(self, map):
@@ -117,6 +120,37 @@ class SimulationEngine:
         payload["wind_speed"] = int(payload["wind_speed"] / 0.2)
         payload["wind_direction"] = int(payload["wind_direction"] / 0.5)
         return payload
+    
+    def generate_satellite_payload(self, downscale_factor=4):
+        # Map values to colors: -1=black, 0=green, 1=red
+        color_map = {
+            -1: [0, 0, 0],       # black
+             0: [34, 139, 34],   # forest green
+             1: [255, 0, 0],     # red
+        }
+        grid = self.env.fire_grid
+        rgb_array = np.zeros((*grid.shape, 3), dtype=np.uint8)
+        for val, color in color_map.items():
+            rgb_array[grid == val] = color
+
+        # Apply Gaussian blur to each channel
+        blurred = np.zeros_like(rgb_array)
+        for i in range(3):
+            blurred[..., i] = scipy.ndimage.gaussian_filter(rgb_array[..., i], sigma=1)
+
+        # Downsample the blurred image
+        small_rgb = blurred[::downscale_factor, ::downscale_factor, :]
+
+        # Flip vertically to correct y-axis inversion
+        small_rgb = np.flipud(small_rgb)
+
+        # Convert to PIL Image
+        img = Image.fromarray(small_rgb, mode='RGB')
+
+        # Encode as JPEG bytes
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG')
+        return buf.getvalue()
 
     def step(self):
         self.env.evolve_wind()

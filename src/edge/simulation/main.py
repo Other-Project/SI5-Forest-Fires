@@ -1,6 +1,7 @@
 import os
 import asyncio
 from threading import Thread, Event, Lock
+import numpy as np
 import paho.mqtt.client as mqtt
 from engine import SimulationEngine
 import geojson
@@ -118,15 +119,30 @@ sim.start_fire(
 env_lock = Lock()
 stop_event = Event()
 
+# --- Satellite sending thread ---
+def satellite_sender_thread(delay=5):
+    step_count = 0
+    while not stop_event.is_set():
+        with env_lock:
+            sat_payload = sim.generate_satellite_payload()
+        sat_topic = "sensors/satellite/view"
+        client.publish(sat_topic, sat_payload)
+        print("-> Satellite | Fire grid data sent (threaded)")
+        step_count += 1
+        stop_event.wait(delay)
 
+def start_satellite_thread(delay=5):
+    t = Thread(target=lambda: satellite_sender_thread(delay), daemon=True)
+    t.start()
+    return t
+
+# --- Simulation loop ---
 async def sim_loop(max_steps=None):
     step_count = 0
     while not stop_event.is_set():
-        # Step + read payloads atomically
         with env_lock:
             sim.step()
             payloads = sim.generate_sensor_payloads()
-
         print(f"Step {step_count}")
         for p in payloads:
             device_id = p["metadata"]["device_id"]
@@ -136,45 +152,63 @@ async def sim_loop(max_steps=None):
             print(
                 f"-> {device_id} | T:{float(p['temperature']):.2f}°C | Vent:{int(p['wind_direction'])}°"
             )
-
         step_count += 1
         if max_steps is not None and step_count >= max_steps:
             break
-
         await asyncio.sleep(1)
-
 
 def start_sim_thread():
     t = Thread(target=lambda: asyncio.run(sim_loop()), daemon=True)
     t.start()
     return t
 
-
-# Start SIM in background thread
+# Start SIM and satellite sender in background threads
 sim_thread = start_sim_thread()
+sat_thread = start_satellite_thread(delay=5)
 
 if PLOT:
     import matplotlib.pyplot as plt
     from matplotlib.colors import ListedColormap
     import matplotlib.animation as animation
+    from PIL import Image
+
+    def decode_sat_image(payload_bytes):
+        try:
+            img = Image.open(BytesIO(payload_bytes))
+            arr = np.array(img)
+            return arr
+        except Exception:
+            # fallback: blank image
+            return np.zeros((map["height"] // 4, map["width"] // 4, 3), dtype=np.uint8)
 
     def update_gui(frame):
         # Safely read fire grid snapshot for display
         with env_lock:
             grid = sim.env.fire_grid.copy()
+            sat_payload_bytes = sim.generate_satellite_payload()
         im_fire.set_data(grid)
         titre.set_text(
             f"Vent {sim.env.wind_speed_map.mean():.1f} km/h à {sim.env.wind_dir_map.mean():.1f}°"
         )
-        return [im_fire, titre]
+        # Update satellite view
+        sat_img = decode_sat_image(sat_payload_bytes)
+        im_sat.set_data(sat_img)
+        return [im_fire, im_sat, titre]
 
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
     cmap = ListedColormap(["black", "forestgreen", "red"])
-    im_fire = ax.imshow(sim.env.fire_grid, cmap=cmap, vmin=-1, vmax=1, origin="lower")
+    # Fire grid
+    im_fire = axs[0].imshow(sim.env.fire_grid, cmap=cmap, vmin=-1, vmax=1, origin="lower")
     sx = [s.x for s in sim.sensors]
     sy = [s.y for s in sim.sensors]
-    ax.scatter(sx, sy, c="cyan", edgecolors="white", s=80)
-    titre = ax.set_title("")
+    axs[0].scatter(sx, sy, c="cyan", edgecolors="white", s=80)
+    titre = axs[0].set_title("")
+
+    # Satellite view preview
+    sat_payload_bytes = sim.generate_satellite_payload()
+    sat_img = decode_sat_image(sat_payload_bytes)
+    im_sat = axs[1].imshow(sat_img)
+    axs[1].set_title("Satellite View")
 
     ani = animation.FuncAnimation(
         fig, update_gui, frames=200, interval=1000, blit=False
@@ -183,6 +217,7 @@ if PLOT:
 else:
     try:
         sim_thread.join()
+        sat_thread.join()
     except KeyboardInterrupt:
         pass
 
@@ -190,5 +225,6 @@ else:
 print("Stopping simulation...")
 stop_event.set()
 sim_thread.join(timeout=5)
+sat_thread.join(timeout=5)
 client.loop_stop()
 client.disconnect()

@@ -4,6 +4,7 @@ input:
     client_id: "redpanda_bridge_input"
     topics: 
       - "sensors/+/+/raw"
+      - "sensors/satellite/view"
 
 pipeline:
   processors:
