@@ -110,7 +110,23 @@ class FirePredictor:
         self.publish_interval = 2.0
 
     def update_weather_from_sensors(self, sensors_dict):
-        if len(sensors_dict) < 3: return
+        if len(sensors_dict) < 3:
+            # If not enough sensors, fill weather_data with default values
+            self.min_lat, self.max_lat = 0, 1
+            self.min_lon, self.max_lon = 0, 1
+            grid_x, grid_y = np.meshgrid(
+                np.linspace(self.min_lon, self.max_lon, self.size),
+                np.linspace(self.min_lat, self.max_lat, self.size)
+            )
+            self.weather_data = {
+                'temperature': np.full((self.size, self.size), 20.0),
+                'air_humidity': np.full((self.size, self.size), 50.0),
+                'wind_speed': np.full((self.size, self.size), 0.0),
+                'wind_direction': np.full((self.size, self.size), 0.0)
+            }
+            self.initialized = True
+            return
+
         sensors = list(sensors_dict.values())
 
         lats = [s.location.latitude for s in sensors]
@@ -217,10 +233,14 @@ class FirePredictor:
         if current_time - self.last_publish_time < self.publish_interval:
             return
 
-        if not self.initialized or not known_sensors:
+        if not self.initialized:
             return
 
-        primary_area = next(iter(known_sensors.values())).forest_area
+        # Use a default area if no sensors
+        if known_sensors:
+            primary_area = next(iter(known_sensors.values())).forest_area
+        else:
+            primary_area = "default_zone"
         lat_step = (self.max_lat - self.min_lat) / self.size
         lon_step = (self.max_lon - self.min_lon) / self.size
 
@@ -267,8 +287,8 @@ class FirePredictor:
     def get_sensor_coords(self):
         coords = []
         for s in known_sensors.values():
-            px = (s.location.longitude - self.min_lon) / (self.max_lon - self.min_lon) * (self.size - 1)
-            py = (s.location.latitude - self.min_lat) / (self.max_lat - self.min_lat) * (self.size - 1)
+            px = (s.location.longitude - self.min_lon) / (self.max_lon - self.min_lon) * (self.size - 1) if (self.max_lon - self.min_lon) != 0 else 0
+            py = (s.location.latitude - self.min_lat) / (self.max_lat - self.min_lat) * (self.size - 1) if (self.max_lat - self.min_lat) != 0 else 0
             coords.append((px, py))
         return coords
 
@@ -277,13 +297,9 @@ predictor = FirePredictor(size=GRID_SIZE)
 def process_simulation_step():
     predictor.update_weather_from_sensors(known_sensors)
 
-    if not predictor.initialized:
-        return False, f"Attente données Redpanda... ({len(known_sensors)} capteurs)"
-
     predictor.calculate_prediction(steps=PREDICTION_STEPS)
     predictor.publish_risk_map()
 
-    # include wind info in the returned status message
     ws, wd_dir = predictor.get_global_wind()
     wind_text = f" | vent {ws}m/s @{wd_dir}°" if ws is not None and wd_dir is not None else ""
     return True, f"Feu prédis | {len(known_sensors)} capteurs{wind_text}"
