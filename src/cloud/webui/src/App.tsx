@@ -116,11 +116,11 @@ const App: Component = () => {
           }
 
           // handle structured messages if your server uses wrappers
-          if (data && data.type === 'areas' && data.payload) {
+          if (data && data.message_type === 'areas' && data.payload) {
             setForestAreas(data.payload);
             return;
           }
-          if (data && data.type === 'wind' && data.payload) {
+          if (data && data.message_type === 'wind' && data.payload) {
             setWindData({ speed: data.payload.speed ?? 0, direction: data.payload.direction ?? 0 });
             return;
           }

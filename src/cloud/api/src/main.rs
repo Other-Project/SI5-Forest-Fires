@@ -2,15 +2,36 @@ use actix_web::{App, Error, HttpRequest, HttpResponse, HttpServer, Responder, ge
 use actix_ws::AggregatedMessage;
 use clap::{Arg, Command};
 use futures::StreamExt;
+use geojson::{FeatureCollection, GeoJson};
 use log::info;
-use rust_shared::logger;
+use once_cell::sync::Lazy;
+use rust_shared::{logger};
 
-mod redpanda_watcher;
+use crate::{messages::WindMessage, redpanda_listener::Listener};
+
+mod messages;
+mod redpanda_listener;
+
+static GEOJSON_LISTENER: Lazy<Listener<GeoJson>> = Lazy::new(|| {
+    Listener::new(GeoJson::from(FeatureCollection {
+        bbox: None,
+        features: vec![],
+        foreign_members: None,
+    }))
+});
+
+static WIND_LISTENER: Lazy<Listener<WindMessage>> = Lazy::new(|| {
+    Listener::new(WindMessage {
+        speed: 0.0,
+        direction: 0.0,
+    })
+});
+
 
 #[get("/watch")]
 async fn watch() -> impl Responder {
     info!("Received request for GeoJSON data");
-    let serialized: String = redpanda_watcher::get_geojson().await.to_string();
+    let serialized: String = GEOJSON_LISTENER.get().await.to_string();
     info!("Returning GeoJSON data: {}", serialized);
     HttpResponse::Ok()
         .content_type("application/geo+json")
@@ -20,7 +41,7 @@ async fn watch() -> impl Responder {
 #[get("/ws")]
 async fn echo(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
     let (res, mut session, ws_stream) = actix_ws::handle(&req, stream)?;
-    let mut geojson_notifications = redpanda_watcher::subscribe_geojson_notifications();
+    let mut geojson_notifications = GEOJSON_LISTENER.subscribe_notifications();
 
     // Task to send GeoJSON data on notification
     rt::spawn({
@@ -29,8 +50,17 @@ async fn echo(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Er
             loop {
                 match geojson_notifications.recv().await {
                     Ok(_) => {
-                        let geojson = redpanda_watcher::get_geojson().await.to_string();
-                        match session.text(geojson).await {
+                        let geojson = GEOJSON_LISTENER.get().await;
+                        let msg = messages::ApiMessage {
+                            message_type: "areas".to_string(),
+                            payload: Some(geojson),
+                        };
+                        let json = serde_json::to_string(&msg);
+                        if json.is_err() {
+                            log::error!("Failed to serialize GeoJSON data");
+                            continue;
+                        }
+                        match session.text(json.unwrap()).await {
                             Ok(()) => log::info!("Sent updated GeoJSON data over websocket"),
                             Err(e) => log::error!("Failed to send GeoJSON data: {}", e),
                         };
@@ -102,10 +132,15 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting API server...");
 
-    tokio::spawn(redpanda_watcher::init(
+    tokio::spawn(GEOJSON_LISTENER.init(
         brokers.clone(),
         group_id.clone(),
         input_topic.clone(),
+    ));
+    tokio::spawn(WIND_LISTENER.init(
+        brokers.clone(),
+        group_id.clone(),
+        "maps.wind".to_string(),
     ));
 
     HttpServer::new(|| App::new().service(watch).service(echo))
