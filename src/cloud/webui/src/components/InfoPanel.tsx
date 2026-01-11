@@ -44,12 +44,12 @@ const InfoPanel: Component<{ viewMode: Accessor<ViewMode> }> = (props) => {
           <h3>Fire Surveillance</h3>
           <div class="legend">
             <div class="legend-item">
-              <span class="dot red"></span>
-              <span>Active</span>
+              <span class="dot orange"></span>
+              <span>At Risk</span>
             </div>
             <div class="legend-item">
-              <span class="dot orange"></span>
-              <span>Contained</span>
+              <span class="dot red"></span>
+              <span>Active</span>
             </div>
             <div class="legend-item">
               <span class="dot grey"></span>
