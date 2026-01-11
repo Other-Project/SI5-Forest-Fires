@@ -161,7 +161,7 @@ const App: Component = () => {
       <MapContainer
         viewMode={viewMode}
         areas={forestAreas}
-        windData={windData()}
+        windData={windData}
       >
         <InfoPanel viewMode={viewMode} />
         {/*<WindIndicator direction={windData().direction} speed={windData().speed} />*/}

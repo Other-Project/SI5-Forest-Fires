@@ -1,4 +1,4 @@
-import { type Component, createSignal, onMount, createEffect, type JSXElement } from 'solid-js';
+import { type Component, createSignal, onMount, createEffect, type JSXElement, type Accessor } from 'solid-js';
 import maplibregl from 'maplibre-gl';
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -11,9 +11,9 @@ import type { FeatureCollection } from 'geojson';
 const DEM_TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'; // terrarium tiles (no key)
 
 type MapContainerProps = {
-    viewMode: () => ViewMode;
-    windData: WindData;
-    areas: () => FeatureCollection;
+    viewMode: Accessor<ViewMode>;
+    windData: Accessor<WindData>;
+    areas: Accessor<FeatureCollection>;
     children?: JSXElement;
 };
 
@@ -50,41 +50,45 @@ function createUniformWindData(u: number, v: number) {
 
 
 const MapContainer: Component<MapContainerProps> = (props) => {
-    // keep both getter and setter so we can read the map instance later
     const [map, setMap] = createSignal<maplibregl.Map | null>(null);
     const [overlay, setOverlay] = createSignal<MapboxOverlay | null>(null);
 
     const createLayers = () => {
-        const currentView = props.viewMode();
+        try {
+            const currentView = props.viewMode();
 
-        const layers: LayersList = [];
+            const layers: LayersList = [];
 
-        if (currentView === 'risk') {
-            // TODO
-        } else if (currentView === 'surveillance') {
-            // TODO
+            if (currentView === 'risk') {
+                // TODO
+            } else if (currentView === 'surveillance') {
+                // TODO
+            }
+
+            const wind = props.windData();
+            const [wind_u, wind_v] = wind ? [
+                wind.speed * Math.cos((wind.direction * Math.PI) / 180),
+                wind.speed * Math.sin((wind.direction * Math.PI) / 180)
+            ] : [0, 0];
+
+            layers.push(new ParticleLayer({
+                id: 'wind-layer',
+                image: createUniformWindData(wind_u, wind_v),
+                imageType: 'VECTOR', // data is (u,v) vectors
+                bounds: [4.5, 43, 8, 45], // [minLon, minLat, maxLon, maxLat]
+                numParticles: 2048,
+                maxAge: 40,
+                speedFactor: 10,
+                width: 2,
+                color: [50, 50, 50, 50],
+                imageInterpolation: 'LINEAR'
+            }));
+
+            return layers;
+        } catch (e) {
+            console.error('Error creating layers:', e);
+            return [];
         }
-
-        const [wind_u, wind_v] = props.windData ? [
-            props.windData.speed * Math.cos((props.windData.direction * Math.PI) / 180),
-            props.windData.speed * Math.sin((props.windData.direction * Math.PI) / 180)
-        ] : [0, 0];
-
-        layers.push(new ParticleLayer({
-            id: 'wind-layer',
-            image: createUniformWindData(wind_u, wind_v),
-            imageType: 'VECTOR', // data is (u,v) vectors
-            bounds: [4.5, 43, 8, 45], // [minLon, minLat, maxLon, maxLat]
-            numParticles: 2048,
-            maxAge: 40,
-            speedFactor: 10,
-            width: 2,
-            color: [50, 50, 50, 50],
-            imageInterpolation: 'LINEAR'
-        }));
-
-
-        return layers;
     };
 
     const setLayerVisibility = () => {
