@@ -110,7 +110,18 @@ async fn echo(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Er
             .max_continuation_size(2_usize.pow(20));
         while let Some(msg) = ws_stream.next().await {
             match msg {
-                Ok(AggregatedMessage::Ping(msg)) => session.pong(&msg).await.unwrap(),
+                Ok(AggregatedMessage::Ping(msg)) => {
+                    let _ = session.pong(&msg).await;
+                }
+                Ok(AggregatedMessage::Text(text)) => {
+                    // Handle text messages (e.g., client pings)
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if parsed.get("type").and_then(|v| v.as_str()) == Some("ping") {
+                            let pong = serde_json::json!({"type": "pong", "ts": parsed.get("ts")});
+                            let _ = session.text(pong.to_string()).await;
+                        }
+                    }
+                }
                 _ => {}
             }
         }
