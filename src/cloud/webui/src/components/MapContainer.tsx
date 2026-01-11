@@ -152,9 +152,9 @@ const MapContainer: Component<MapContainerProps> = (props) => {
                     'fill-color': [
                         'match',
                         ['to-number', ['get', 'status']],
-                        0, '#ef4444',
                         1, '#f97316',
-                        2, '#6b7280',
+                        2, '#ef4444',
+                        3, '#6b7280',
                         '#000000' // default
                     ],
                     'fill-opacity': 0.4,

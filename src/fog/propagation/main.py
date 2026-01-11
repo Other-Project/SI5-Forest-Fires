@@ -114,6 +114,12 @@ def consume_redpanda():
 consumer_thread = threading.Thread(target=consume_redpanda, daemon=True)
 consumer_thread.start()
 
+# Cell state constants
+STATE_VEGETATION = 0
+STATE_AT_RISK = 1
+STATE_BURNING = 2
+STATE_BURNT = 3
+
 class FirePredictor:
     def __init__(self, size=50):
         self.size = size
@@ -220,9 +226,9 @@ class FirePredictor:
             
             # Update fire position from satellite
             # mask: 0=vegetation, 1=fire, 2=burnt
-            self.satellite_fire_grid = np.zeros_like(satellite_grid, dtype=float)
-            self.satellite_fire_grid[satellite_grid == 1] = 1.0  # Active fire
-            self.satellite_fire_grid[satellite_grid == 2] = 0.5  # Burnt areas (less priority)
+            self.satellite_fire_grid = np.zeros_like(satellite_grid, dtype=int)
+            self.satellite_fire_grid[satellite_grid == 1] = STATE_BURNING  # Burning
+            self.satellite_fire_grid[satellite_grid == 2] = STATE_BURNT   # Burnt
             
             last_satellite_update = time.time()
             self.last_satellite_readjustment = time.time()
@@ -304,16 +310,20 @@ class FirePredictor:
         
         # Combine satellite position with meteo prediction
         if self.last_satellite_readjustment > 0:
-            # Weighted combination: satellite (ground truth) + meteo (prediction)
-            self.display_grid = (
-                SATELLITE_WEIGHT * self.satellite_fire_grid +
-                METEO_WEIGHT * self.meteo_prediction_grid
-            )
-            # Threshold to binary
-            self.display_grid = (self.display_grid >= 0.5).astype(float)
+            # 4-state grid: 3=burnt, 2=burning, 1=at risk, 0=vegetation/none
+            combined = np.full_like(self.satellite_fire_grid, STATE_VEGETATION, dtype=int)
+            # Burnt: satellite says burnt (STATE_BURNT)
+            combined[self.satellite_fire_grid == STATE_BURNT] = STATE_BURNT
+            # Burning: satellite says burning (STATE_BURNING)
+            combined[self.satellite_fire_grid == STATE_BURNING] = STATE_BURNING
+            # At risk: not burnt/burning but meteo predicts fire
+            at_risk = (self.satellite_fire_grid == STATE_VEGETATION) & (self.meteo_prediction_grid >= 0.5)
+            combined[at_risk] = STATE_AT_RISK
+            self.display_grid = combined
         else:
-            # No satellite data yet, use only meteo
-            self.display_grid = self.meteo_prediction_grid
+            # No satellite data yet, use only meteo: at risk (STATE_AT_RISK)
+            self.display_grid = np.full_like(self.meteo_prediction_grid, STATE_VEGETATION, dtype=int)
+            self.display_grid[self.meteo_prediction_grid >= 0.5] = STATE_AT_RISK
 
     def _calculate_propagation_probability(self, r1, c1, r2, c2):
         """
@@ -369,17 +379,19 @@ class FirePredictor:
         lat_step = (self.max_lat - self.min_lat) / self.size
         lon_step = (self.max_lon - self.min_lon) / self.size
 
-        rows, cols = np.where(self.display_grid >= 0.5)
+        # Only output cells with value > 0 (at risk, burning, burnt)
+        rows, cols = np.where(self.display_grid > STATE_VEGETATION)
 
         cells_data = []
         for r, c in zip(rows, cols):
             cell_lat = self.min_lat + (r * lat_step)
             cell_lon = self.min_lon + (c * lon_step)
+            value = int(self.display_grid[r, c])  # 3=burnt, 2=burning, 1=at risk
 
             cells_data.append({
                 "latitude": round(cell_lat, 6),
                 "longitude": round(cell_lon, 6),
-                "value": float(self.display_grid[r, c])
+                "value": value
             })
 
         if not cells_data:
@@ -519,9 +531,10 @@ if PLOT:
     print("Démarrage en mode GUI (PLOT=True)")
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    colors = ['forestgreen', 'orange']
+    # Update colormap for 4 states: vegetation, at risk, burning, burnt
+    colors = ['forestgreen', 'gold', 'red', 'black']  # 0, 1, 2, 3
     cmap = ListedColormap(colors)
-    bounds = [-0.5, 0.5, 1.5]
+    bounds = [-0.5, 0.5, 1.5, 2.5, 3.5]  # 0, 1, 2, 3
     norm = BoundaryNorm(bounds, cmap.N)
 
     matrice = ax.imshow(np.zeros((GRID_SIZE, GRID_SIZE)), cmap=cmap, norm=norm, origin='lower')
