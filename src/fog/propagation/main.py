@@ -13,6 +13,8 @@ import time
 import re
 import os
 import datetime
+from PIL import Image
+import io
 
 REDPANDA_BROKER = os.getenv("REDPANDA_BROKER", "localhost:19092")
 PLOT = os.getenv("PLOT", "True").lower() == "true"
@@ -293,6 +295,61 @@ class FirePredictor:
         return coords
 
 predictor = FirePredictor(size=GRID_SIZE)
+
+satellite_grid = None
+satellite_lock = threading.Lock()
+
+def classify_satellite_pixels(arr):
+    # arr: (H, W, 3) RGB
+    r = arr[..., 0].astype(np.float32)
+    g = arr[..., 1].astype(np.float32)
+    b = arr[..., 2].astype(np.float32)
+
+    mask = np.zeros(arr.shape[:2], dtype=np.uint8)  # default: vegetation
+
+    # Burnt: all channels low and similar (dark/gray/black)
+    burnt = (r < 80) & (g < 80) & (b < 80) & (np.abs(r-g) < 30) & (np.abs(r-b) < 30) & (np.abs(g-b) < 30)
+    # Fire: red is dominant and at least 40 higher than both green and blue
+    fire = (r > g + 40) & (r > b + 40)
+    # Vegetation: green is dominant and at least 30 higher than both red and blue
+    vegetation = (g > r + 30) & (g > b + 30)
+
+    mask[burnt] = 2
+    mask[fire] = 1
+    mask[vegetation] = 0  # already default
+
+    return mask
+
+def consume_satellite_view():
+    global satellite_grid
+    try:
+        consumer = KafkaConsumer(
+            'sensors.satellite.view',
+            bootstrap_servers=[REDPANDA_BROKER],
+            value_deserializer=lambda m: m,
+            auto_offset_reset='latest',
+            group_id='satellite-group'
+        )
+        print("✓ Satellite consumer connected")
+        for message in consumer:
+            try:
+                img_bytes = message.value
+                img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+                img = img.resize((GRID_SIZE, GRID_SIZE), Image.BILINEAR)
+                arr = np.array(img)
+                
+                mask = classify_satellite_pixels(arr)
+                with satellite_lock:
+                    satellite_grid = mask
+
+                print(f"Found {np.sum(mask==1)} fire pixels in satellite image and {np.sum(mask==2)} burnt pixels.")
+            except Exception as e:
+                print(f"Erreur lecture satellite: {e}")
+    except KafkaError as e:
+        print(f"Erreur Kafka satellite: {e}")
+
+sat_thread = threading.Thread(target=consume_satellite_view, daemon=True)
+sat_thread.start()
 
 def process_simulation_step():
     predictor.update_weather_from_sensors(known_sensors)

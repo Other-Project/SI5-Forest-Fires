@@ -121,7 +121,7 @@ class SimulationEngine:
         payload["wind_direction"] = int(payload["wind_direction"] / 0.5)
         return payload
     
-    def generate_satellite_payload(self, downscale_factor=4):
+    def generate_satellite_payload(self, downscale_factor=1):
         # Map values to colors: -1=black, 0=green, 1=red
         color_map = {
             -1: [0, 0, 0],       # black

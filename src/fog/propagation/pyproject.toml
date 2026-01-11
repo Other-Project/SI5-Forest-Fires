@@ -9,5 +9,6 @@ dependencies = [
     "matplotlib>=3.10.8",
     "numpy>=2.4.0",
     "paho-mqtt>=2.1.0",
+    "python-snappy>=0.7.3",
     "scipy>=1.16.3",
 ]
