@@ -41,9 +41,9 @@ async fn watch() -> impl Responder {
 #[get("/ws")]
 async fn echo(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
     let (res, mut session, ws_stream) = actix_ws::handle(&req, stream)?;
-    let mut geojson_notifications = GEOJSON_LISTENER.subscribe_notifications();
 
     // Task to send GeoJSON data on notification
+    let mut geojson_notifications = GEOJSON_LISTENER.subscribe_notifications();
     rt::spawn({
         let mut session = session.clone();
         async move {
@@ -71,6 +71,37 @@ async fn echo(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Er
             }
         }
     });
+
+    // Task to send Wind data on notification
+    let mut wind_notifications = WIND_LISTENER.subscribe_notifications();
+    rt::spawn({
+        let mut session = session.clone();
+        async move {
+            loop {
+                match wind_notifications.recv().await {
+                    Ok(_) => {
+                        let wind = WIND_LISTENER.get().await;
+                        let msg = messages::ApiMessage {
+                            message_type: "wind".to_string(),
+                            payload: Some(wind),
+                        };
+                        let json = serde_json::to_string(&msg);
+                        if json.is_err() {
+                            log::error!("Failed to serialize Wind data");
+                            continue;
+                        }
+                        match session.text(json.unwrap()).await {
+                            Ok(()) => log::info!("Sent updated Wind data over websocket"),
+                            Err(e) => log::error!("Failed to send Wind data: {}", e),
+                        };
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                }
+            }
+        }
+    });
+
 
     // Task to handle incoming websocket messages
     rt::spawn(async move {

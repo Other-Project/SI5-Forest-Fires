@@ -15,10 +15,10 @@ use rust_shared::redpanda_utils;
 use strfmt::strfmt;
 
 use crate::map_message;
-use crate::process::gen_geojson;
+use crate::process::{gen_geojson, gen_wind_message};
 
 // Process weather data message
-async fn process_message(msg: OwnedMessage) -> Result<String, String> {
+async fn process_message(msg: OwnedMessage) -> Result<(String, Option<String>), String> {
     info!("Processing message at offset {}", msg.offset());
 
     // Extract payload as byte array
@@ -31,8 +31,9 @@ async fn process_message(msg: OwnedMessage) -> Result<String, String> {
         .map_err(|e| format!("Failed to deserialize MapMessage: {}", e))?;
 
     // Serialize to JSON for publishing
-    let json = gen_geojson(map_message);
-    Ok(json)
+    let map_json = gen_geojson(&map_message);
+    let wind_json = gen_wind_message(&map_message);
+    Ok((map_json, wind_json))
 }
 
 async fn upload_to_minio(
@@ -92,12 +93,12 @@ pub async fn run_async_processor(
             let producer = producer.clone();
             async move {
                 match process_message(msg).await {
-                    Ok(json_payload) => {
+                    Ok((map_json, wind_json)) => {
                         info!(
                             "Uploading GeoJSON payload to MinIO bucket: {}",
                             minio_bucket
                         );
-                        match upload_to_minio(minio_client, minio_bucket, json_payload.clone())
+                        match upload_to_minio(minio_client, minio_bucket, map_json.clone())
                             .await
                         {
                             Ok(_) => info!("Successfully uploaded GeoJSON to MinIO"),
@@ -110,15 +111,28 @@ pub async fn run_async_processor(
                         if let Ok(topic_name) = strfmt(&output_topic, &vars) {
                             let produce_future = producer.send(
                                 FutureRecord::<(), [u8]>::to(topic_name.as_str())
-                                    .payload(json_payload.as_bytes()),
+                                    .payload(map_json.as_bytes()),
                                 Duration::from_secs(5),
                             );
                             match produce_future.await {
-                                Ok(delivery) => info!("Published message: {:?}", delivery),
-                                Err((e, _)) => error!("Failed to publish message: {:?}", e),
+                                Ok(delivery) => info!("Published map message: {:?}", delivery),
+                                Err((e, _)) => error!("Failed to publish map message: {:?}", e),
                             }
                         } else {
                             error!("Failed to format output topic string: {}", output_topic);
+                        }
+
+                        if let Some(wind_json) = wind_json {
+                            let wind_topic = "maps.wind";
+                            let produce_future = producer.send(
+                                FutureRecord::<(), [u8]>::to(wind_topic)
+                                    .payload(wind_json.as_bytes()),
+                                Duration::from_secs(5),
+                            );
+                            match produce_future.await {
+                                Ok(delivery) => info!("Published wind message: {:?}", delivery),
+                                Err((e, _)) => error!("Failed to publish wind message: {:?}", e),
+                            }
                         }
                     }
                     Err(e) => error!("Failed to process message logic: {}", e),

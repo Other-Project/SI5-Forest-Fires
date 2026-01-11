@@ -190,6 +190,28 @@ class FirePredictor:
 
         return max(0.0, min(1.0, (0.1 * dryness) + wind_factor))
 
+    # compute global mean wind speed and circular mean wind direction
+    def get_global_wind(self):
+        if not self.initialized:
+            return None, None
+        wd = self.weather_data
+        if 'wind_speed' not in wd or 'wind_direction' not in wd:
+            return None, None
+        try:
+            ws_grid = wd['wind_speed']
+            wd_grid = wd['wind_direction']
+            mean_ws = float(np.nanmean(ws_grid))
+            angs = np.deg2rad(wd_grid.astype(float))
+            sin_sum = np.nansum(np.sin(angs))
+            cos_sum = np.nansum(np.cos(angs))
+            if sin_sum == 0 and cos_sum == 0:
+                mean_dir = 0.0
+            else:
+                mean_dir = (np.degrees(np.arctan2(sin_sum, cos_sum)) + 360.0) % 360.0
+            return round(mean_ws, 1), int(round(mean_dir))
+        except Exception:
+            return None, None
+
     def publish_risk_map(self):
         current_time = time.time()
         if current_time - self.last_publish_time < self.publish_interval:
@@ -218,17 +240,26 @@ class FirePredictor:
         if not cells_data: return
 
         payload = {
-            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "cell_size_lat": round(lat_step, 6),
             "cell_size_lon": round(lon_step, 6),
             "cells": cells_data
         }
 
+        # include global wind info if available
+        mean_ws, mean_dir = self.get_global_wind()
+        if mean_ws is not None and mean_dir is not None:
+            payload["wind_speed"] = mean_ws
+            payload["wind_direction"] = mean_dir
+
         topic = "maps.watch"
 
         try:
             producer.send(topic, value=payload)
-            print(f"-> Sent risk map to {topic} ({len(cells_data)} cells)")
+            if mean_ws is not None and mean_dir is not None:
+                print(f"-> Sent risk map to {topic} ({len(cells_data)} cells) wind={mean_ws}m/s dir={mean_dir}°")
+            else:
+                print(f"-> Sent risk map to {topic} ({len(cells_data)} cells)")
             self.last_publish_time = current_time
         except Exception as e:
             print(f"Erreur envoi Kafka: {e}")
@@ -252,7 +283,10 @@ def process_simulation_step():
     predictor.calculate_prediction(steps=PREDICTION_STEPS)
     predictor.publish_risk_map()
 
-    return True, f"Feu prédis | {len(known_sensors)} capteurs"
+    # include wind info in the returned status message
+    ws, wd_dir = predictor.get_global_wind()
+    wind_text = f" | vent {ws}m/s @{wd_dir}°" if ws is not None and wd_dir is not None else ""
+    return True, f"Feu prédis | {len(known_sensors)} capteurs{wind_text}"
 
 if PLOT:
     print("Démarrage en mode GUI (PLOT=True)")
