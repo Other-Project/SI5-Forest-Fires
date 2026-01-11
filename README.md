@@ -17,6 +17,7 @@ This project simulates and monitors forest fires using a distributed cyber-physi
 ### Prerequisites
 
 Docker and Docker Compose must be installed on your machine to run the project.
+UV is required to run the simulation outside of Docker.
 
 ### Running the Project
 
@@ -24,6 +25,12 @@ The entire stack can be launched using the main compose file:
 
 ```bash
 docker compose up -d --build
+```
+
+You might want to start the simulation manually to see the GUI updating in real-time:
+
+```bash
+docker compose stop simulation && uv --directory src/edge/simulation run main.py
 ```
 
 ### Accessing Services
@@ -50,7 +57,7 @@ The system is divided into three layers:
 
 ## Technologies
 
-*   **Languages**: Rust, Python, TypeScript (SolidJS/Bun/Vite)
+*   **Languages**: Rust, Python (with uv), TypeScript (SolidJS/Bun/Vite)
 *   **Messaging**: MQTT (Mosquitto), Kafka (Redpanda)
 *   **Storage**: MinIO, InfluxDB
 *   **Infrastructure**: Docker
