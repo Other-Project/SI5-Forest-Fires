@@ -1,3 +1,4 @@
+import base64
 import numpy as np
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
@@ -19,9 +20,14 @@ import io
 REDPANDA_BROKER = os.getenv("REDPANDA_BROKER", "localhost:19092")
 PLOT = os.getenv("PLOT", "True").lower() == "true"
 
-GRID_SIZE = 50
+GRID_SIZE = 64
 PREDICTION_STEPS = 10
 FIRE_THRESHOLD = 60.0
+
+# Satellite readjustment configuration
+SATELLITE_WEIGHT = 0.7  # Weight for satellite data in readjustment
+METEO_WEIGHT = 0.3      # Weight for meteo station data
+SATELLITE_UPDATE_THRESHOLD = 5.0  # seconds between satellite updates
 
 def json_serializer(data):
     return json.dumps(data).encode("utf-8")
@@ -47,16 +53,25 @@ class SensorData:
     soil_humidity: float = 50.0
     wind_speed: float = 0.0
     wind_direction: int = 0
+    timestamp: float = 0.0
 
 known_sensors = {}
+satellite_grid = None
+satellite_lock = threading.Lock()
+last_satellite_update = 0.0
+satellite_bbox = None  # (min_lon, min_lat, max_lon, max_lat)
 
 def consume_redpanda():
+    """
+    Consume meteo station data for high-frequency precision updates.
+    Meteo stations provide fast, localized data for propagation refinement.
+    """
     max_retries = 5
     retry_count = 0
 
     while retry_count < max_retries:
         try:
-            print(f"Tentative de connexion à Redpanda ({retry_count + 1}/{max_retries})...")
+            print(f"Tentative de connexion à Redpanda (meteo) ({retry_count + 1}/{max_retries})...")
             consumer = KafkaConsumer(
                 bootstrap_servers=[REDPANDA_BROKER],
                 value_deserializer=lambda m: json.loads(m.decode('utf-8')),
@@ -65,7 +80,7 @@ def consume_redpanda():
             )
             pattern = re.compile(r'sensors\.meteo\..*\.data')
             consumer.subscribe(pattern=pattern)
-            print("✓ Connecté à Redpanda")
+            print("✓ Connecté à Redpanda (meteo)")
             retry_count = 0
 
             for message in consumer:
@@ -82,14 +97,15 @@ def consume_redpanda():
                         air_humidity=p['air_humidity'],
                         soil_humidity=p['soil_humidity'],
                         wind_speed=p['wind_speed'],
-                        wind_direction=p['wind_direction']
+                        wind_direction=p['wind_direction'],
+                        timestamp=time.time()
                     )
                     known_sensors[s.id] = s
                 except Exception as e:
-                    print(f"Erreur parsing: {e}")
+                    print(f"Erreur parsing meteo: {e}")
         except KafkaError as e:
             retry_count += 1
-            print(f"✗ Erreur Kafka: {e}")
+            print(f"✗ Erreur Kafka (meteo): {e}")
             if retry_count < max_retries:
                 time.sleep(2 ** retry_count)
             else:
@@ -105,13 +121,41 @@ class FirePredictor:
         self.min_lon, self.max_lon = 0, 0
         self.weather_data = {}
         self.initialized = False
-        self.seed_grid = np.zeros((size, size))
+        
+        # Satellite-based fire position (ground truth)
+        self.satellite_fire_grid = np.zeros((size, size))
+        # Meteo-based prediction (high frequency)
+        self.meteo_prediction_grid = np.zeros((size, size))
+        # Combined display grid
         self.display_grid = np.zeros((size, size))
 
         self.last_publish_time = 0
         self.publish_interval = 2.0
+        
+        # Track when we last readjusted from satellite
+        self.last_satellite_readjustment = 0.0
+
+        self.satellite_bbox = None  # (min_lon, min_lat, max_lon, max_lat)
+
+    def _get_biggest_bbox(self, station_bbox, satellite_bbox):
+        """
+        Return the biggest bbox covering both station and satellite bboxes.
+        Each bbox is (min_lon, min_lat, max_lon, max_lat)
+        """
+        if station_bbox is None and satellite_bbox is None:
+            return (0, 1, 0, 1)
+        if station_bbox is None:
+            return satellite_bbox
+        if satellite_bbox is None:
+            return station_bbox
+        min_lon = min(station_bbox[0], satellite_bbox[0])
+        min_lat = min(station_bbox[1], satellite_bbox[1])
+        max_lon = max(station_bbox[2], satellite_bbox[2])
+        max_lat = max(station_bbox[3], satellite_bbox[3])
+        return (min_lon, min_lat, max_lon, max_lat)
 
     def update_weather_from_sensors(self, sensors_dict):
+        global satellite_bbox
         if len(sensors_dict) < 3:
             # If not enough sensors, fill weather_data with default values
             self.min_lat, self.max_lat = 0, 1
@@ -134,16 +178,21 @@ class FirePredictor:
         lats = [s.location.latitude for s in sensors]
         lons = [s.location.longitude for s in sensors]
 
-        self.min_lat, self.max_lat = min(lats), max(lats)
-        self.min_lon, self.max_lon = min(lons), max(lons)
+        # Compute station bbox
+        station_min_lat, station_max_lat = min(lats), max(lats)
+        station_min_lon, station_max_lon = min(lons), max(lons)
+        lat_margin = (station_max_lat - station_min_lat) * 0.1 if station_max_lat != station_min_lat else 0.01
+        lon_margin = (station_max_lon - station_min_lon) * 0.1 if station_max_lon != station_min_lon else 0.01
+        station_bbox = (
+            station_min_lon - lon_margin,
+            station_min_lat - lat_margin,
+            station_max_lon + lon_margin,
+            station_max_lat + lat_margin,
+        )
 
-        lat_margin = (self.max_lat - self.min_lat) * 0.1 if self.max_lat != self.min_lat else 0.01
-        lon_margin = (self.max_lon - self.min_lon) * 0.1 if self.max_lon != self.min_lon else 0.01
-
-        self.min_lat -= lat_margin
-        self.max_lat += lat_margin
-        self.min_lon -= lon_margin
-        self.max_lon += lon_margin
+        # Use the biggest bbox between satellite and stations
+        biggest_bbox = self._get_biggest_bbox(station_bbox, satellite_bbox)
+        self.min_lon, self.min_lat, self.max_lon, self.max_lat = biggest_bbox
 
         points = np.array([[s.location.longitude, s.location.latitude] for s in sensors])
 
@@ -158,10 +207,43 @@ class FirePredictor:
 
         self.initialized = True
 
-    def calculate_prediction(self, steps=3):
-        if not self.initialized: return
-        self.seed_grid = np.zeros((self.size, self.size))
+    def readjust_from_satellite(self):
+        """
+        Readjust fire position based on satellite imagery.
+        Satellite data is the ground truth but updates less frequently.
+        """
+        global satellite_grid, last_satellite_update
+        
+        with satellite_lock:
+            if satellite_grid is None:
+                return False
+            
+            # Update fire position from satellite
+            # mask: 0=vegetation, 1=fire, 2=burnt
+            self.satellite_fire_grid = np.zeros_like(satellite_grid, dtype=float)
+            self.satellite_fire_grid[satellite_grid == 1] = 1.0  # Active fire
+            self.satellite_fire_grid[satellite_grid == 2] = 0.5  # Burnt areas (less priority)
+            
+            last_satellite_update = time.time()
+            self.last_satellite_readjustment = time.time()
+            
+            fire_count = np.sum(satellite_grid == 1)
+            burnt_count = np.sum(satellite_grid == 2)
+            print(f"🛰️  Satellite readjustment: {fire_count} fire cells, {burnt_count} burnt cells")
+            
+            return True
 
+    def predict_from_meteo(self, steps=3):
+        """
+        Fast prediction based on meteo station data.
+        Uses temperature thresholds and weather conditions for propagation.
+        """
+        if not self.initialized:
+            return
+        
+        # Initialize from meteo station hot spots
+        seed_grid = np.zeros((self.size, self.size))
+        
         for s in known_sensors.values():
             if s.temperature > FIRE_THRESHOLD:
                 px = int((s.location.longitude - self.min_lon) / (self.max_lon - self.min_lon) * (self.size - 1))
@@ -171,30 +253,72 @@ class FirePredictor:
                     for dx in range(-2, 3):
                         ny, nx = py+dy, px+dx
                         if 0 <= ny < self.size and 0 <= nx < self.size:
-                            self.seed_grid[ny, nx] = 1
+                            seed_grid[ny, nx] = 1
 
-        sim_grid = self.seed_grid.copy()
+        # If we have satellite data, use it as additional seed
+        if self.last_satellite_readjustment > 0:
+            seed_grid = np.maximum(seed_grid, self.satellite_fire_grid)
 
-        for _ in range(steps):
+        sim_grid = seed_grid.copy()
+
+        # Propagation simulation
+        for step in range(steps):
             new_spread = np.zeros_like(sim_grid)
-            rows, cols = np.where(sim_grid == 1)
+            rows, cols = np.where(sim_grid >= 0.5)
 
             for r, c in zip(rows, cols):
                 for dr in [-1, 0, 1]:
                     for dc in [-1, 0, 1]:
-                        if dr==0 and dc==0: continue
+                        if dr==0 and dc==0:
+                            continue
                         nr, nc = r+dr, c+dc
 
                         if 0 <= nr < self.size and 0 <= nc < self.size:
-                            if sim_grid[nr, nc] == 0:
-                                prob = self._calculate_proba(r, c, nr, nc)
+                            if sim_grid[nr, nc] < 0.5:
+                                prob = self._calculate_propagation_probability(r, c, nr, nc)
                                 if random.random() < prob:
                                     new_spread[nr, nc] = 1
             sim_grid = np.maximum(sim_grid, new_spread)
 
-        self.display_grid = sim_grid
+        self.meteo_prediction_grid = sim_grid
 
-    def _calculate_proba(self, r1, c1, r2, c2):
+    def calculate_prediction(self, steps=3):
+        """
+        Main prediction method combining satellite and meteo data.
+        Satellite provides position readjustment, meteo provides high-frequency updates.
+        """
+        if not self.initialized:
+            return
+        
+        # Try to readjust from satellite if available
+        global last_satellite_update
+        current_time = time.time()
+        
+        # Check if we have recent satellite data
+        time_since_sat_update = current_time - last_satellite_update
+        if time_since_sat_update < SATELLITE_UPDATE_THRESHOLD:
+            self.readjust_from_satellite()
+        
+        # Always run meteo prediction for high-frequency updates
+        self.predict_from_meteo(steps)
+        
+        # Combine satellite position with meteo prediction
+        if self.last_satellite_readjustment > 0:
+            # Weighted combination: satellite (ground truth) + meteo (prediction)
+            self.display_grid = (
+                SATELLITE_WEIGHT * self.satellite_fire_grid +
+                METEO_WEIGHT * self.meteo_prediction_grid
+            )
+            # Threshold to binary
+            self.display_grid = (self.display_grid >= 0.5).astype(float)
+        else:
+            # No satellite data yet, use only meteo
+            self.display_grid = self.meteo_prediction_grid
+
+    def _calculate_propagation_probability(self, r1, c1, r2, c2):
+        """
+        Calculate fire propagation probability based on weather conditions.
+        """
         wd = self.weather_data
         T = wd['temperature'][r2, c2]
         H = wd['air_humidity'][r2, c2]
@@ -231,6 +355,10 @@ class FirePredictor:
             return None, None
 
     def publish_risk_map(self):
+        """
+        Publish risk map to Kafka.
+        Includes metadata about data sources (satellite vs meteo).
+        """
         current_time = time.time()
         if current_time - self.last_publish_time < self.publish_interval:
             return
@@ -238,15 +366,10 @@ class FirePredictor:
         if not self.initialized:
             return
 
-        # Use a default area if no sensors
-        if known_sensors:
-            primary_area = next(iter(known_sensors.values())).forest_area
-        else:
-            primary_area = "default_zone"
         lat_step = (self.max_lat - self.min_lat) / self.size
         lon_step = (self.max_lon - self.min_lon) / self.size
 
-        rows, cols = np.where(self.display_grid == 1)
+        rows, cols = np.where(self.display_grid >= 0.5)
 
         cells_data = []
         for r, c in zip(rows, cols):
@@ -256,16 +379,22 @@ class FirePredictor:
             cells_data.append({
                 "latitude": round(cell_lat, 6),
                 "longitude": round(cell_lon, 6),
-                "value": 1.0
+                "value": float(self.display_grid[r, c])
             })
 
-        if not cells_data: return
+        if not cells_data:
+            return
 
         payload = {
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "cell_size_lat": round(lat_step, 6),
             "cell_size_lon": round(lon_step, 6),
-            "cells": cells_data
+            "cells": cells_data,
+            "data_sources": {
+                "meteo_stations": len(known_sensors),
+                "satellite_age_seconds": round(current_time - last_satellite_update, 1) if last_satellite_update > 0 else None,
+                "has_satellite": self.last_satellite_readjustment > 0
+            }
         }
 
         # include global wind info if available
@@ -278,10 +407,9 @@ class FirePredictor:
 
         try:
             producer.send(topic, value=payload)
-            if mean_ws is not None and mean_dir is not None:
-                print(f"-> Sent risk map to {topic} ({len(cells_data)} cells) wind={mean_ws}m/s dir={mean_dir}°")
-            else:
-                print(f"-> Sent risk map to {topic} ({len(cells_data)} cells)")
+            sat_info = f", sat:{round(current_time - last_satellite_update, 1)}s" if last_satellite_update > 0 else ""
+            wind_info = f", wind={mean_ws}m/s @{mean_dir}°" if mean_ws is not None else ""
+            print(f"→ Risk map: {len(cells_data)} cells, {len(known_sensors)} meteo{sat_info}{wind_info}")
             self.last_publish_time = current_time
         except Exception as e:
             print(f"Erreur envoi Kafka: {e}")
@@ -296,10 +424,10 @@ class FirePredictor:
 
 predictor = FirePredictor(size=GRID_SIZE)
 
-satellite_grid = None
-satellite_lock = threading.Lock()
-
 def classify_satellite_pixels(arr):
+    """
+    Classify satellite image pixels into vegetation, fire, and burnt areas.
+    """
     # arr: (H, W, 3) RGB
     r = arr[..., 0].astype(np.float32)
     g = arr[..., 1].astype(np.float32)
@@ -321,7 +449,11 @@ def classify_satellite_pixels(arr):
     return mask
 
 def consume_satellite_view():
-    global satellite_grid
+    """
+    Consume satellite imagery for ground truth fire position.
+    Satellite updates are less frequent but more accurate for position readjustment.
+    """
+    global satellite_grid, last_satellite_update, satellite_bbox
     try:
         consumer = KafkaConsumer(
             'sensors.satellite.view',
@@ -333,16 +465,25 @@ def consume_satellite_view():
         print("✓ Satellite consumer connected")
         for message in consumer:
             try:
-                img_bytes = message.value
+                msg = json.loads(message.value.decode('utf-8'))
+                img_b64 = msg.get("image", "")
+                img_bytes = base64.b64decode(img_b64)
                 img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
                 img = img.resize((GRID_SIZE, GRID_SIZE), Image.BILINEAR)
                 arr = np.array(img)
+                arr =np.flipud(arr)
                 
                 mask = classify_satellite_pixels(arr)
                 with satellite_lock:
                     satellite_grid = mask
-
-                print(f"Found {np.sum(mask==1)} fire pixels in satellite image and {np.sum(mask==2)} burnt pixels.")
+                    last_satellite_update = time.time()
+                    bbox = msg.get("bbox", None)
+                    if bbox and isinstance(bbox, list) and len(bbox) == 4:
+                        # bbox: [min_lon, min_lat, max_lon, max_lat]
+                        satellite_bbox = tuple(bbox)
+                fire_px = np.sum(mask==1)
+                burnt_px = np.sum(mask==2)
+                print(f"🛰️  Satellite update: {fire_px} fire pixels, {burnt_px} burnt pixels")
             except Exception as e:
                 print(f"Erreur lecture satellite: {e}")
     except KafkaError as e:
@@ -352,14 +493,27 @@ sat_thread = threading.Thread(target=consume_satellite_view, daemon=True)
 sat_thread.start()
 
 def process_simulation_step():
+    """
+    Process one simulation step.
+    - Update weather from meteo stations (fast)
+    - Run prediction combining satellite position + meteo propagation
+    - Publish risk map
+    """
     predictor.update_weather_from_sensors(known_sensors)
 
     predictor.calculate_prediction(steps=PREDICTION_STEPS)
     predictor.publish_risk_map()
 
+    # Status reporting
     ws, wd_dir = predictor.get_global_wind()
     wind_text = f" | vent {ws}m/s @{wd_dir}°" if ws is not None and wd_dir is not None else ""
-    return True, f"Feu prédis | {len(known_sensors)} capteurs{wind_text}"
+    
+    sat_status = ""
+    if predictor.last_satellite_readjustment > 0:
+        sat_age = time.time() - predictor.last_satellite_readjustment
+        sat_status = f" | sat:{sat_age:.1f}s ago"
+    
+    return True, f"Feu prédis | {len(known_sensors)} meteo{wind_text}{sat_status}"
 
 if PLOT:
     print("Démarrage en mode GUI (PLOT=True)")

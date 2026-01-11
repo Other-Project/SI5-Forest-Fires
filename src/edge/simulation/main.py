@@ -10,6 +10,7 @@ import json
 from io import BytesIO
 from minio import Minio
 from minio.error import S3Error
+import base64
 
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
@@ -126,7 +127,11 @@ def satellite_sender_thread(delay=5):
         with env_lock:
             sat_payload = sim.generate_satellite_payload()
         sat_topic = "sensors/satellite/view"
-        client.publish(sat_topic, sat_payload)
+
+        img_b64 = base64.b64encode(sat_payload).decode("ascii")
+        wrapper = {"bbox": map.get("bbox"), "image": img_b64}
+        client.publish(sat_topic, json.dumps(wrapper))
+
         print("-> Satellite | Fire grid data sent (threaded)")
         step_count += 1
         stop_event.wait(delay)
