@@ -24,6 +24,7 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET", "stations")
 
+START_MARGIN = 15
 
 def parse_geojson(file_path):
     try:
@@ -110,10 +111,9 @@ if MINIO:
         exit(1)
 
 sim = SimulationEngine(map)
-start_margin = 5
 sim.start_fire(
-    x=random.randint(start_margin, map["width"] - 1 - start_margin),
-    y=random.randint(start_margin, map["height"] - 1 - start_margin),
+    x=random.randint(START_MARGIN, map["width"] - 1 - START_MARGIN),
+    y=random.randint(START_MARGIN, map["height"] - 1 - START_MARGIN),
 )
 
 # New: shared-state lock and stop event
