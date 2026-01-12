@@ -163,10 +163,32 @@ class FirePredictor:
 
     def update_weather_from_sensors(self, sensors_dict):
         global satellite_bbox
-        if len(sensors_dict) < 3:
+        sensors = list(sensors_dict.values())
+
+        if len(sensors) >= 1:
+            lats = [s.location.latitude for s in sensors]
+            lons = [s.location.longitude for s in sensors]
+
+            # Compute station bbox
+            station_min_lat, station_max_lat = min(lats), max(lats)
+            station_min_lon, station_max_lon = min(lons), max(lons)
+            lat_margin = (station_max_lat - station_min_lat) * 0.1 if station_max_lat != station_min_lat else 0.01
+            lon_margin = (station_max_lon - station_min_lon) * 0.1 if station_max_lon != station_min_lon else 0.01
+            station_bbox = (
+                station_min_lon - lon_margin,
+                station_min_lat - lat_margin,
+                station_max_lon + lon_margin,
+                station_max_lat + lat_margin,
+            )
+        else:
+            station_bbox = None
+
+        # Use the biggest bbox between satellite and stations
+        biggest_bbox = self._get_biggest_bbox(station_bbox, satellite_bbox)
+        self.min_lon, self.min_lat, self.max_lon, self.max_lat = biggest_bbox
+
+        if len(sensors) < 3:
             # If not enough sensors, fill weather_data with default values
-            self.min_lat, self.max_lat = 0, 1
-            self.min_lon, self.max_lon = 0, 1
             grid_x, grid_y = np.meshgrid(
                 np.linspace(self.min_lon, self.max_lon, self.size),
                 np.linspace(self.min_lat, self.max_lat, self.size)
@@ -179,27 +201,6 @@ class FirePredictor:
             }
             self.initialized = True
             return
-
-        sensors = list(sensors_dict.values())
-
-        lats = [s.location.latitude for s in sensors]
-        lons = [s.location.longitude for s in sensors]
-
-        # Compute station bbox
-        station_min_lat, station_max_lat = min(lats), max(lats)
-        station_min_lon, station_max_lon = min(lons), max(lons)
-        lat_margin = (station_max_lat - station_min_lat) * 0.1 if station_max_lat != station_min_lat else 0.01
-        lon_margin = (station_max_lon - station_min_lon) * 0.1 if station_max_lon != station_min_lon else 0.01
-        station_bbox = (
-            station_min_lon - lon_margin,
-            station_min_lat - lat_margin,
-            station_max_lon + lon_margin,
-            station_max_lat + lat_margin,
-        )
-
-        # Use the biggest bbox between satellite and stations
-        biggest_bbox = self._get_biggest_bbox(station_bbox, satellite_bbox)
-        self.min_lon, self.min_lat, self.max_lon, self.max_lat = biggest_bbox
 
         points = np.array([[s.location.longitude, s.location.latitude] for s in sensors])
 
