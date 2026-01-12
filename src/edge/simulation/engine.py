@@ -33,7 +33,7 @@ class SimulationEngine:
 
     def update_sensors(self):
         r = 2
-
+        ABERRANT_PROB = 0.05  # 5% chance
         for s in self.sensors:
             y_min = max(0, s.y - r)
             y_max = min(self.env.y_size, s.y + r + 1)
@@ -41,14 +41,37 @@ class SimulationEngine:
             x_max = min(self.env.x_size, s.x + r + 1)
 
             local_temps = self.env.temp_map[y_min:y_max, x_min:x_max]
-            s.read_temp = np.max(local_temps)
+            temp = np.max(local_temps)
+            air_hum = np.mean(self.env.air_hum_map[y_min:y_max, x_min:x_max])
+            soil_hum = np.mean(self.env.soil_hum_map[y_min:y_max, x_min:x_max])
+            pressure = np.mean(self.env.pressure_map[y_min:y_max, x_min:x_max])
+            rain = np.mean(self.env.rain_map[y_min:y_max, x_min:x_max])
+            wind_s = np.mean(self.env.wind_speed_map[y_min:y_max, x_min:x_max])
+            wind_d = self.env.wind_dir_map[s.y, s.x]
 
-            s.read_air_hum = np.mean(self.env.air_hum_map[y_min:y_max, x_min:x_max])
-            s.read_soil_hum = np.mean(self.env.soil_hum_map[y_min:y_max, x_min:x_max])
-            s.read_pressure = np.mean(self.env.pressure_map[y_min:y_max, x_min:x_max])
-            s.read_rain = np.mean(self.env.rain_map[y_min:y_max, x_min:x_max])
-            s.read_wind_s = np.mean(self.env.wind_speed_map[y_min:y_max, x_min:x_max])
-            s.read_wind_d = self.env.wind_dir_map[s.y, s.x]
+            # Inject aberrant values randomly
+            if random.random() < ABERRANT_PROB:
+                temp = random.choice([-50, 100])  # Extreme temp
+            if random.random() < ABERRANT_PROB:
+                air_hum = random.choice([0, 100])  # Extreme humidity
+            if random.random() < ABERRANT_PROB:
+                soil_hum = random.choice([0, 100])
+            if random.random() < ABERRANT_PROB:
+                pressure = random.choice([800, 1200])  # hPa, out of normal range
+            if random.random() < ABERRANT_PROB:
+                rain = random.choice([0, 500])  # mm, extreme
+            if random.random() < ABERRANT_PROB:
+                wind_s = random.choice([0, 100])  # m/s, extreme
+            if random.random() < ABERRANT_PROB:
+                wind_d = random.choice([0, 360])  # deg, random
+
+            s.read_temp = temp
+            s.read_air_hum = air_hum
+            s.read_soil_hum = soil_hum
+            s.read_pressure = pressure
+            s.read_rain = rain
+            s.read_wind_s = wind_s
+            s.read_wind_d = wind_d
 
     def generate_sensor_payloads(self):
         payloads = []
