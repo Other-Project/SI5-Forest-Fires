@@ -142,7 +142,6 @@ class SimulationEngine:
         burnt_cells = np.count_nonzero(self.env.fire_grid == -1)
         burnt_fraction = burnt_cells / total_cells
 
-        # Exponential decay: prob = base_prob * exp(-k * burnt_fraction)
         base_prob = 0.05
         decay_k = 6.0
         fire_start_prob = base_prob * np.exp(-decay_k * burnt_fraction)
@@ -169,9 +168,10 @@ class SimulationEngine:
                             if random.random() < prob:
                                 new_fire[nr, nc] = 1
 
-        # Regrowth logic
+        # Regrowth logic: regrow probability increases with burnt age
         min_burnt_steps = 40
         base_regrow_prob = 0.01  # base probability per green neighbor
+        max_regrow_multiplier = 5.0  # cap scaling to avoid excessive regrowth
         burnt_rows, burnt_cols = np.where((self.env.fire_grid == -1) & (self.burnt_age_grid >= min_burnt_steps))
         for r, c in zip(burnt_rows, burnt_cols):
             green_neighbors = 0
@@ -184,7 +184,10 @@ class SimulationEngine:
                         if self.env.fire_grid[nr, nc] == 0:
                             green_neighbors += 1
             if green_neighbors > 0:
-                regrow_prob = base_regrow_prob * green_neighbors
+                # Linear scaling: every 40 steps increases multiplier by 1, capped
+                age = self.burnt_age_grid[r, c]
+                regrow_multiplier = min(max_regrow_multiplier, age / min_burnt_steps)
+                regrow_prob = base_regrow_prob * green_neighbors * regrow_multiplier
                 if random.random() < regrow_prob:
                     new_fire[r, c] = 0
                     self.burnt_age_grid[r, c] = 0  # Reset age on regrow
