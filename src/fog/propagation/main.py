@@ -1,4 +1,5 @@
 import base64
+from sys import stdout
 import numpy as np
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
@@ -569,6 +570,7 @@ else:
                 pass
             else:
                 print(f"[Wait] {status}")
+            stdout.flush()
             time.sleep(1.0)
 
     except KeyboardInterrupt:

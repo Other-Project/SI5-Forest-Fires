@@ -1,5 +1,6 @@
 import os
 import asyncio
+from sys import stdout
 from threading import Thread, Event, Lock
 import numpy as np
 import paho.mqtt.client as mqtt
@@ -160,6 +161,7 @@ async def sim_loop(max_steps=None):
         step_count += 1
         if max_steps is not None and step_count >= max_steps:
             break
+        stdout.flush()
         await asyncio.sleep(1)
 
 def start_sim_thread():
