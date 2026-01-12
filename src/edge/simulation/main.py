@@ -112,10 +112,6 @@ if MINIO:
         exit(1)
 
 sim = SimulationEngine(map)
-sim.start_fire(
-    x=random.randint(START_MARGIN, map["width"] - 1 - START_MARGIN),
-    y=random.randint(START_MARGIN, map["height"] - 1 - START_MARGIN),
-)
 
 # New: shared-state lock and stop event
 env_lock = Lock()

@@ -27,11 +27,14 @@ class SimulationEngine:
 
         # Track how long each cell has been burnt (-1)
         self.burnt_age_grid = np.zeros((self.env.y_size, self.env.x_size), dtype=np.int32)
+        self.fire_start_margin = 15  # margin from edge for random fire start
 
         self.update_sensors()
 
-    def start_fire(self, x, y):
-        print(f"Starting fire at ({x}, {y})")
+    def start_fire(self):
+        x = random.randint(self.fire_start_margin, self.env.x_size - 1 - self.fire_start_margin)
+        y = random.randint(self.fire_start_margin, self.env.y_size - 1 - self.fire_start_margin)
+        print(f"Randomly starting fire at ({x}, {y})")
         self.env.fire_grid[y, x] = 1
 
     def update_sensors(self):
@@ -133,6 +136,19 @@ class SimulationEngine:
 
     def step(self):
         self.env.evolve_wind()
+
+        # Fire start logic: exponential decay with burnt fraction
+        total_cells = self.env.x_size * self.env.y_size
+        burnt_cells = np.count_nonzero(self.env.fire_grid == -1)
+        burnt_fraction = burnt_cells / total_cells
+
+        # Exponential decay: prob = base_prob * exp(-k * burnt_fraction)
+        base_prob = 0.05
+        decay_k = 6.0
+        fire_start_prob = base_prob * np.exp(-decay_k * burnt_fraction)
+
+        if random.random() < fire_start_prob:
+            self.start_fire()
 
         new_fire = self.env.fire_grid.copy()
         # Update burnt_age_grid: increment where burnt, reset elsewhere
