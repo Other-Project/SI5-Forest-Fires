@@ -1,4 +1,4 @@
-from dataclasses import dataclass,field
+from dataclasses import dataclass
 
 @dataclass
 class Sensor:
@@ -14,5 +14,4 @@ class Sensor:
     read_rain: float = 0.0
     read_wind_s: float = 0.0
     read_wind_d: int = 0
-    temp_history: list = field(default_factory=list)
     

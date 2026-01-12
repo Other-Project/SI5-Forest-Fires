@@ -1,6 +1,5 @@
 from sensor import Sensor
 from environment import Environment
-from filters import apply_median_filter # Import du filtre
 import datetime
 import numpy as np
 import random
@@ -25,10 +24,6 @@ class SimulationEngine:
             for s in map["sensors"]
         ]
 
-        # Initialisation de l'historique pour chaque capteur
-        for s in self.sensors:
-            s.temp_history = []
-
         print(f"Initialized simulation of size {self.env.x_size}x{self.env.y_size} with {len(self.sensors)} sensors.")
 
         self.update_sensors()
@@ -48,13 +43,6 @@ class SimulationEngine:
 
             local_temps = self.env.temp_map[y_min:y_max, x_min:x_max]
             s.read_temp = np.max(local_temps)
-
-            # mise à jour de l'historique
-            s.temp_history.append(s.read_temp)
-            
-            # On limite l'historique à 20 mesures pour ne pas saturer la mémoire
-            if len(s.temp_history) > 20:
-                s.temp_history.pop(0)
 
             s.read_air_hum = np.mean(self.env.air_hum_map[y_min:y_max, x_min:x_max])
             s.read_soil_hum = np.mean(self.env.soil_hum_map[y_min:y_max, x_min:x_max])
@@ -100,15 +88,8 @@ class SimulationEngine:
         payloads = []
         now = datetime.datetime.now()
         battery = 3.6
-        k = 2  # Paramètre du filtre (voisinage de 2k + 1 = 5 échantillons)
 
         for s in self.sensors:
-            # Application du filtre médian sur l'historique
-            filtered_temps = apply_median_filter(s.temp_history, k)
-            
-            # On récupère la dernière valeur filtrée (y[n])
-            temp_value = filtered_temps[-1] if len(filtered_temps) > 0 else s.read_temp
-
             payload = {
                 "metadata": {
                     "device_id": s.id,
@@ -116,7 +97,7 @@ class SimulationEngine:
                     "battery_voltage": battery,
                     "statut_bits": 0,
                 },
-                "temperature": temp_value,
+                "temperature": s.read_temp,
                 "air_humidity": s.read_air_hum,
                 "soil_humidity": s.read_soil_hum,
                 "air_pressure": s.read_pressure,
