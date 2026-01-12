@@ -3,7 +3,7 @@ from collections import defaultdict
 # Buffer to accumulate payloads per device (sliding window)
 _payload_buffer = defaultdict(list)
 # Sliding window size
-WINDOW_SIZE = 10
+WINDOW_SIZE = 6
 
 def _generate_mean_payload(payloads):
     if not payloads:
