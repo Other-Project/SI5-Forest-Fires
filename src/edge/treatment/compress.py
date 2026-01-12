@@ -1,5 +1,12 @@
 import struct
 
+ranges = {
+    "H": (0, 65535),      # u16
+    "I": (0, 4294967295), # u32
+    "h": (-32768, 32767), # i16
+    "B": (0, 255),        # u8
+}
+
 
 def payload_to_bytes(payload):
     # Define the mapping of fields to struct format specifiers
@@ -22,12 +29,13 @@ def payload_to_bytes(payload):
 
     # Extract values from the payload based on the mapping
     values = []
-    for field, _ in field_mapping:
+    for field, fmt_char in field_mapping:
         keys = field.split(".")
         value = payload
+        (range_min, range_max) = ranges[fmt_char]
         for key in keys:
             value = value[key]
-        values.append(int(value))
+        values.append(max(range_min, min(range_max, int(value))))
 
     # Pack the data into bytes
     return struct.pack(fmt, *values)
