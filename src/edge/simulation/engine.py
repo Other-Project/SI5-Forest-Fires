@@ -25,6 +25,9 @@ class SimulationEngine:
 
         print(f"Initialized simulation of size {self.env.x_size}x{self.env.y_size} with {len(self.sensors)} sensors.")
 
+        # Track how long each cell has been burnt (-1)
+        self.burnt_age_grid = np.zeros((self.env.y_size, self.env.x_size), dtype=np.int32)
+
         self.update_sensors()
 
     def start_fire(self, x, y):
@@ -132,6 +135,10 @@ class SimulationEngine:
         self.env.evolve_wind()
 
         new_fire = self.env.fire_grid.copy()
+        # Update burnt_age_grid: increment where burnt, reset elsewhere
+        self.burnt_age_grid[self.env.fire_grid == -1] += 1
+        self.burnt_age_grid[self.env.fire_grid != -1] = 0
+
         rows, cols = np.where(self.env.fire_grid == 1)
         for r, c in zip(rows, cols):
             new_fire[r, c] = -1
@@ -145,6 +152,27 @@ class SimulationEngine:
                             prob = self.env.get_probability(r, c, nr, nc)
                             if random.random() < prob:
                                 new_fire[nr, nc] = 1
+
+        # Regrowth logic
+        min_burnt_steps = 40
+        base_regrow_prob = 0.01  # base probability per green neighbor
+        burnt_rows, burnt_cols = np.where((self.env.fire_grid == -1) & (self.burnt_age_grid >= min_burnt_steps))
+        for r, c in zip(burnt_rows, burnt_cols):
+            green_neighbors = 0
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < self.env.y_size and 0 <= nc < self.env.x_size:
+                        if self.env.fire_grid[nr, nc] == 0:
+                            green_neighbors += 1
+            if green_neighbors > 0:
+                regrow_prob = base_regrow_prob * green_neighbors
+                if random.random() < regrow_prob:
+                    new_fire[r, c] = 0
+                    self.burnt_age_grid[r, c] = 0  # Reset age on regrow
+
         self.env.fire_grid = new_fire
 
         self.env.apply_heat_from_fire()
