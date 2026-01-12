@@ -17,3 +17,15 @@ services:
       - mqtt-broker
       - minio
     restart: unless-stopped
+  treatment:
+    build:
+      context: ./src/edge/treatment
+      dockerfile: Dockerfile
+    networks:
+      - forest-fire-network
+    environment:
+      MQTT_BROKER: mqtt-broker
+      MQTT_PORT: 1883
+    depends_on:
+      - mqtt-broker
+    restart: unless-stopped

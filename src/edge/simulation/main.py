@@ -152,9 +152,8 @@ async def sim_loop(max_steps=None):
         print(f"Step {step_count}")
         for p in payloads:
             device_id = p["metadata"]["device_id"]
-            payload = sim.payload_to_bytes(p)
-            topic = f"sensors/meteo/{device_id}/raw"
-            client.publish(topic, payload)
+            topic = f"sensors/meteo/{device_id}/lora"
+            client.publish(topic, json.dumps(p))
             print(
                 f"-> {device_id} | T:{float(p['temperature']):.2f}°C | Vent:{int(p['wind_direction'])}°"
             )

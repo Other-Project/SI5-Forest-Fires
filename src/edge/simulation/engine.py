@@ -3,7 +3,6 @@ from environment import Environment
 import datetime
 import numpy as np
 import random
-import struct
 import scipy.ndimage
 from PIL import Image
 import io
@@ -51,39 +50,6 @@ class SimulationEngine:
             s.read_wind_s = np.mean(self.env.wind_speed_map[y_min:y_max, x_min:x_max])
             s.read_wind_d = self.env.wind_dir_map[s.y, s.x]
 
-    def payload_to_bytes(self, payload):
-        payload = self.payload_to_discrete(payload)
-
-        # Define the mapping of fields to struct format specifiers
-        field_mapping = [
-            ("metadata.device_id", "H"),  # u16
-            ("metadata.timestamp", "I"),  # u32
-            ("metadata.battery_voltage", "H"),  # u16
-            ("metadata.statut_bits", "B"),  # u8
-            ("temperature", "h"),  # i16
-            ("air_humidity", "B"),  # u8
-            ("soil_humidity", "B"),  # u8
-            ("air_pressure", "H"),  # u16
-            ("rain", "H"),  # u16
-            ("wind_speed", "B"),  # u8
-            ("wind_direction", "H"),  # u16
-        ]
-
-        # Build the format string dynamically
-        fmt = ">" + "".join(f[1] for f in field_mapping)
-
-        # Extract values from the payload based on the mapping
-        values = []
-        for field, _ in field_mapping:
-            keys = field.split(".")
-            value = payload
-            for key in keys:
-                value = value[key]
-            values.append(int(value))
-
-        # Pack the data into bytes
-        return struct.pack(fmt, *values)
-
     def generate_sensor_payloads(self):
         payloads = []
         now = datetime.datetime.now()
@@ -107,18 +73,6 @@ class SimulationEngine:
             }
             payloads.append(payload)
         return payloads
-    
-    def payload_to_discrete(self, payload):
-        payload = payload.copy()
-        payload["metadata"]["battery_voltage"] = int(payload["metadata"]["battery_voltage"] * 100)
-        payload["temperature"] = int((payload["temperature"] + 20.0) / 0.25)
-        payload["air_humidity"] = int(payload["air_humidity"])
-        payload["soil_humidity"] = int(payload["soil_humidity"])
-        payload["air_pressure"] = int(payload["air_pressure"] / 0.1)
-        payload["rain"] = int(payload["rain"] / 0.2)
-        payload["wind_speed"] = int(payload["wind_speed"] / 0.2)
-        payload["wind_direction"] = int(payload["wind_direction"] / 0.5)
-        return payload
     
     def generate_satellite_payload(self, downscale_factor=1):
         # Map values to colors: -1=black, 0=green, 1=red
