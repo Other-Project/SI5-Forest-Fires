@@ -8,26 +8,32 @@ input:
 pipeline:
   processors:
     - mapping: |
-        # Décodage du JSON depuis le contenu brut
-        let doc = content().parse_json().catch({})
-
-        # Récupération des tags (location=meteo, sensor_id=3)
-        let parts = meta("kafka_topic").split(".")
-        let loc_tag = $parts.index(1).catch("unknown")
-        let sid_tag = $parts.index(2).catch("unknown")
-
-        # Extraction des champs avec des valeurs par défaut de secours
-        let dev_id = $doc.device_id | 0
-        let lat = $doc.location.latitude | 0.0
-        let lon = $doc.location.longitude | 0.0
-        let alt = $doc.location.altitude | 0.0
-        let forest = $doc.forest_area | "unknown"
-
-        # création de la ligne pour InfluxDB
-        # %v pour les nombres, %s pour les chaînes
-        let fields = "device_id=%v,lat=%v,lon=%v,alt=%v,forest=\"%s\"".format($dev_id, $lat, $lon, $alt, $forest)
+        let root = this
         
-        root = "sensor_data,location=%s,sensor_id=%s %s".format($loc_tag, $sid_tag, $fields)
+        let measurement = "sensor_data"
+        let dev_id = $root.metadata.device_id.string().catch("0")
+        let forest = $root.metadata.forest_area.string().catch("unknown")
+        let quality = $root.metadata.data_quality_flag.string().catch("Good")
+
+        let lat = $root.metadata.location.latitude.number().catch(0.0)
+        let lon = $root.metadata.location.longitude.number().catch(0.0)
+        let temp = $root.temperature.number().catch(0.0)
+        let press = $root.air_pressure.number().catch(0.0)
+
+        root = "%s,device_id=%s,forest_area=%s,quality=%s lat=%v,lon=%v,temperature=%v,pressure=%v".format(
+          $measurement,
+          $dev_id,
+          $forest,
+          $quality,
+          $lat,
+          $lon,
+          $temp,
+          $press
+        )
+
+    - log:
+        level: INFO
+        message: "VÉRIFICATION FORMAT : ${! content() }"
 
 output:
   http_client:
