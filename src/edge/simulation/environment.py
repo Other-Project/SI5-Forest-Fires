@@ -31,11 +31,11 @@ class Environment:
 
     def apply_heat_from_fire(self):
         fire_mask = (self.fire_grid == 1)
-        self.temp_map[fire_mask] += 40
+        self.temp_map[fire_mask] = np.random.uniform(60, 70, 1)[0]
         self.temp_map = np.clip(self.temp_map, -20, 800)
-        self.air_hum_map[fire_mask] -= 15
+        self.air_hum_map[fire_mask] = np.random.uniform(5, 45, 1)[0]
         self.air_hum_map = np.clip(self.air_hum_map, 0, 100)
-        self.soil_hum_map[fire_mask] -= 10
+        self.soil_hum_map[fire_mask] = np.random.uniform(5, 40, 1)[0]
         self.soil_hum_map = np.clip(self.soil_hum_map, 0, 100)
 
     def get_probability(self, r1, c1, r2, c2):
