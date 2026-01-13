@@ -33,6 +33,12 @@ You might want to start the simulation manually to see the GUI updating in real-
 docker compose stop simulation && uv --directory src/edge/simulation run main.py
 ```
 
+You can do the same for the propagation service:
+
+```bashbash
+docker compose stop propagation && uv --directory src/fog/propagation run main.py
+```
+
 ### Accessing Services
 
 | Service              | URL                                            | Description               | Credentials                                   |
