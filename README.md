@@ -71,3 +71,8 @@ The system is divided into three layers:
 *   **Storage**: MinIO, InfluxDB
 *   **Infrastructure**: Docker
 
+## Demo
+
+https://github.com/user-attachments/assets/3e4292e0-58c5-4bed-bbf1-a76257120b20
+
+
