@@ -76,7 +76,7 @@ const MapContainer: Component<MapContainerProps> = (props) => {
                 image: createUniformWindData(wind_u, wind_v),
                 imageType: 'VECTOR', // data is (u,v) vectors
                 bounds: [4.5, 43, 8, 45], // [minLon, minLat, maxLon, maxLat]
-                numParticles: 2048,
+                numParticles: 1024,
                 maxAge: 40,
                 speedFactor: 10,
                 width: 2,
