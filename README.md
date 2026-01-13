@@ -16,8 +16,9 @@ This project simulates and monitors forest fires using a distributed cyber-physi
 
 ### Prerequisites
 
-Docker and Docker Compose must be installed on your machine to run the project.
-UV is required to run the simulation outside of Docker.
+[Docker](https://docs.docker.com/engine/install/) and [Docker Compose](https://docs.docker.com/compose/install/linux/) must be installed on your machine to run the project.
+
+[UV](https://docs.astral.sh/uv/) is required to run the simulation outside of Docker.
 
 ### Running the Project
 
@@ -52,7 +53,9 @@ docker compose stop propagation && uv --directory src/fog/propagation run main.p
 
 The system is divided into three layers:
 
-*   **Edge**: Simulates environmental sensors (Temperature, Humidity, etc.) and sends data via MQTT.
+*   **Edge**: 
+    * **Simulation**: Simulates environmental sensors (Temperature, Humidity, etc.) and sends data via MQTT.
+    * **Treatment**: Receives raw sensor data, applies initial filtering, and forwards it to the fog layer via MQTT.
 *   **Fog**:
     *   **Pre-treatment**: Rust service to clean and format raw sensor data.
     *   **Propagation**: Python service to calculate fire spread risks.
