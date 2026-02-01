@@ -1,6 +1,7 @@
 # Forest fire prevention and detection
 
 <p align=center>
+    <img alt="icon" src="src/cloud/webui/public/icon.svg" width="20%" /><br/>
     <span>Project realized by <a href="https://github.com/06Games">Evan Galli</a>, <a href="https://github.com/JokerOnWeed">Anthony Vasta</a> and <a href="https://github.com/sachaCast">Sacha Castillejos</a>
     <br/>as part of the <b>Fundamentals and challenges of cyber-physical systems</b>, <b>From IoT to cyber-physical systems</b> and <b>Development of cyber-physical systems</b> courses.</span>
 </p>
@@ -74,5 +75,24 @@ The system is divided into three layers:
 ## Demo
 
 https://github.com/user-attachments/assets/3e4292e0-58c5-4bed-bbf1-a76257120b20
+
+<table>
+    <tr>
+        <td><img alt="webui1" src="https://github.com/user-attachments/assets/9fdacbd1-388d-44d3-b872-13c685e2dad5" /></td>
+        <td><img alt="webui2" src="https://github.com/user-attachments/assets/c51f4f37-f6bb-4a3e-97f0-7f8aa9aa24a1" /></td>
+    <tr>
+    </tr>
+        <td><img alt="simu1" src="https://github.com/user-attachments/assets/8318bbf3-ce41-49c9-9009-2beba167885c" /></td>
+        <td><img alt="simu2" src="https://github.com/user-attachments/assets/2c9308ab-774c-47c6-a866-e1d2ebaded48" /></td>
+    <tr>
+    </tr>
+        <td><img alt="redpanda" src="https://github.com/user-attachments/assets/e5fb2425-70cf-4586-905c-c76e7af60f13" /></td>
+        <td><img alt="redpanda_JSONdata" src="https://github.com/user-attachments/assets/e8b7df12-5c27-4bed-8259-ed7cf78622dc" /></td>
+    <tr>
+    </tr>
+        <td><img alt="minIO" src="https://github.com/user-attachments/assets/b6427cf7-4260-4403-9195-b45ccee8d934" /></td>
+        <td><img alt="influxDBstats" src="https://github.com/user-attachments/assets/eafc5217-0bd0-4ad7-b489-1d8d143ad271" /></td>
+    </tr>
+</table>
 
 
